@@ -1,0 +1,38 @@
+{:paths ["src"]
+ :deps {org.clojure/clojure {:mvn/version "1.11.1"}
+        org.lwjgl/lwjgl {:mvn/version "3.3.3"}
+        org.lwjgl/lwjgl-glfw {:mvn/version "3.3.3"}
+        org.lwjgl/lwjgl-bgfx {:mvn/version "3.3.3"}
+        nrepl/nrepl {:mvn/version "1.0.0"}
+        cider/cider-nrepl {:mvn/version "0.30.0"}
+        jdf/comfort {:local/root "../../lib/comfort"}}
+ 
+ :aliases
+ {:macos-x64
+  {:extra-deps
+   {org.lwjgl/lwjgl$natives-macos {:mvn/version "3.3.3"}
+    org.lwjgl/lwjgl-glfw$natives-macos {:mvn/version "3.3.3"}
+    org.lwjgl/lwjgl-opengl$natives-macos {:mvn/version "3.3.3"}
+    }
+   :jvm-opts ["-XstartOnFirstThread"]}
+  :macos-arm64
+  {:extra-deps
+   {org.lwjgl/lwjgl$natives-macos-arm64 {:mvn/version "3.3.3"}
+    org.lwjgl/lwjgl-glfw$natives-macos-arm64 {:mvn/version "3.3.3"}
+    org.lwjgl/lwjgl-opengl$natives-macos-arm64 {:mvn/version "3.3.3"}
+    }
+   :jvm-opts ["-XstartOnFirstThread"]}
+  :windows-x64
+  {:extra-deps
+   {org.lwjgl/lwjgl$natives-windows {:mvn/version "3.3.3"}
+    org.lwjgl/lwjgl-glfw$natives-windows {:mvn/version "3.3.3"}
+    org.lwjgl/lwjgl-opengl$natives-windows {:mvn/version "3.3.3"}
+    }}
+  :linux-x64
+  {:extra-deps
+   {org.lwjgl/lwjgl$natives-linux {:mvn/version "3.3.3"}
+    org.lwjgl/lwjgl-glfw$natives-linux {:mvn/version "3.3.3"}
+    org.lwjgl/lwjgl-opengl$natives-linux {:mvn/version "3.3.3"}
+    }}}}
+
+;; % clj -M:macos-x64 -m main
