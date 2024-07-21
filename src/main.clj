@@ -14,9 +14,10 @@
            (java.util.concurrent.atomic AtomicBoolean)))
 
 (defn start-repl [port]
-  (println "Starting nREPL")
+  (println "Starting cider-enabled nREPL on port" port)
   (try
     (nrepl.server/start-server :port port :handler cider.nrepl/cider-nrepl-handler)
+    (println "Ready for cider-connect-clj")
     (catch Exception e
       (println "Problem starting nREPL" (.getMessage e)))))
 
@@ -56,6 +57,29 @@
   (.free (Objects/requireNonNull (GLFW/glfwSetErrorCallback nil)))
   (shutdown-agents))
 
+(defn display-scale
+  "Return window x-scale, y-scale, unscaled width and unscaled height."
+  [window]
+  (let [x (make-array Float/TYPE 1) ; could use FloatBuffer... any advantage?
+        y (make-array Float/TYPE 1)
+        w (make-array Integer/TYPE 1)
+        h (make-array Integer/TYPE 1)]
+    (GLFW/glfwGetWindowContentScale window x y) ; ratio between current dpi and platform's default dpi
+    (GLFW/glfwGetWindowSize window w h) ; in screen coordinates
+    (mapv first [x y w h])))
+
+(def renderer* (atom nil))
+(reset! renderer* ; C-M-x this
+  (fn renderer [window width height]
+    (BGFX/bgfx_set_view_rect 0 0 0 width height)
+    (BGFX/bgfx_touch 0)
+    (BGFX/bgfx_dbg_text_clear 0 false)
+    (let [x (int (- (max (/ width 2 8) 20) 20))
+          y (int (- (max (/ height 2 16) 66) 6))]
+      (BGFX/bgfx_dbg_text_image 10 10
+        40 12 (logo/logo) 160) ; TODO think about resource management, currently just memoized...
+      (BGFX/bgfx_dbg_text_printf 10 10  0x1f "25-c99 -> java -> clojure"))))
+
 (defn make-graphics-renderer [window width height]
   (println "Making renderer")
   (cc/with-resource [stack (MemoryStack/stackPush) nil
@@ -78,22 +102,13 @@
       Platform/WINDOWS
       (doto (.platformData init)
         (.nwh (org.lwjgl.glfw.GLFWNativeWin32/glfwGetWin32Window window))))
-    (println "Initialising bgfx" init)
+    (println "Initialising bgfx")
     (assert (BGFX/bgfx_init init))
     (println "bgfx renderer:" (BGFX/bgfx_get_renderer_name (BGFX/bgfx_get_renderer_type)))
     (BGFX/bgfx_set_debug BGFX/BGFX_DEBUG_TEXT)
     (BGFX/bgfx_set_view_clear 0 (bit-or BGFX/BGFX_CLEAR_COLOR BGFX/BGFX_CLEAR_DEPTH)
       0x303030ff 1.0 0)
-    (fn renderer [width height]
-      (BGFX/bgfx_set_view_rect 0 0 0 width height)
-      (BGFX/bgfx_touch 0)
-      (BGFX/bgfx_dbg_text_clear 0 false)
-      (println "trying to draw")
-      (BGFX/bgfx_dbg_text_image
-          (- (max (/ width 2 8) 20) 20)
-          (- (max (/ height 2 16) 66) 6)
-          40 12 (logo/logo) 160) ; TODO think about resource management, currently just memoized...
-      (BGFX/bgfx_dbg_text_printf 0 1 0x1f "25-c99 -> java -> clojure"))))
+    renderer*))
 
 (defn close-graphics-renderer [_]
   (println "Closing renderer")
@@ -103,20 +118,26 @@
   (println "Making graphics thread")
   (Thread.
     (fn []
-      (cc/with-resource [graphics-renderer (make-graphics-renderer window width height) close-graphics-renderer]
+      (cc/with-resource [graphics-renderer
+                         (make-graphics-renderer window width height)
+                         close-graphics-renderer]
         (try
           (.countDown graphics-latch)
-          (loop []
+          (loop [] ; ────────────────────────────────────────────────── graphics
             (when (not (GLFW/glfwWindowShouldClose window))
-              (graphics-renderer width height)
-              (BGFX/bgfx_frame false)))
+              (try (@graphics-renderer window width height)
+                   (catch Throwable t
+                     (.printStackTrace t)
+                     (Thread/sleep 5)))
+              (BGFX/bgfx_frame false)
+              (recur))) ; full speed!
           (catch Throwable t
             (.printStackTrace t)
             (.set has-error? true)
             (.countDown graphics-latch)))))))
 
 (defn -main [& args]
-  (println "Starting")
+  (println "Startup")
   (let [width 1000 height 500]
     (cc/with-resource
       [repl (start-repl 12345) stop-repl 
@@ -126,19 +147,22 @@
        graphics-thread (make-graphics-thread window width height graphics-latch has-error?) nil]
       (println "Starting graphics thread")
       (.start graphics-thread)
-      (loop [break? false]
+      (loop [break? false] ; await thread
         (when-not break?
           (recur (try (GLFW/glfwPollEvents)
                       (.await graphics-latch 16 TimeUnit/MILLISECONDS)
                       (catch InterruptedException e
                         (throw (IllegalStateException. e)))))))
+      (println "Showing window")
       (GLFW/glfwShowWindow window)
-      (loop []
+      (println "Event loop")
+      (loop [] ; ───────────────────────────────────────────────────────── event
         (when (and
                 (not (GLFW/glfwWindowShouldClose window))
                 (not (.get has-error?)))
-          (GLFW/glfwWaitEvents)
+          (GLFW/glfwWaitEvents) ; wait vs poll because graphics separate
           (recur)))
+      (println "Shutdown")
       (try (.join graphics-thread)
            (catch InterruptedException e
              (.printStackTrace e))))))
@@ -148,5 +172,6 @@
   ;;(setq cider-clojure-cli-global-options "-A:windows-x64")
   ;; Mac, from cli:
   ;; % clj -M:macos-x64 -m main
+  ;; then cider-connect-clj to localhost:port
   (-main)
   )
