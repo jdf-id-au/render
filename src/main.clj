@@ -53,7 +53,8 @@
   (Callbacks/glfwFreeCallbacks window)
   (GLFW/glfwDestroyWindow window)
   (GLFW/glfwTerminate)
-  (.free (Objects/requireNonNull (GLFW/glfwSetErrorCallback nil))))
+  (.free (Objects/requireNonNull (GLFW/glfwSetErrorCallback nil)))
+  (shutdown-agents))
 
 (defn make-graphics-renderer [window width height]
   (println "Making renderer")
@@ -77,7 +78,7 @@
       Platform/WINDOWS
       (doto (.platformData init)
         (.nwh (org.lwjgl.glfw.GLFWNativeWin32/glfwGetWin32Window window))))
-    (println "Initialising bgfx")
+    (println "Initialising bgfx" init)
     (assert (BGFX/bgfx_init init))
     (println "bgfx renderer:" (BGFX/bgfx_get_renderer_name (BGFX/bgfx_get_renderer_type)))
     (BGFX/bgfx_set_debug BGFX/BGFX_DEBUG_TEXT)
@@ -98,20 +99,21 @@
   (println "Closing renderer")
   (BGFX/bgfx_shutdown))
 
-(defn make-graphics-thread [window width height graphics-renderer graphics-latch has-error?]
+(defn make-graphics-thread [window width height graphics-latch has-error?]
   (println "Making graphics thread")
   (Thread.
     (fn []
-      (try
-        (.countDown graphics-latch)
-        (loop []
-          (when (not (GLFW/glfwWindowShouldClose window))
-            (graphics-renderer width height)
-            (BGFX/bgfx_frame false)))
-        (catch Throwable t
-          (.printStackTrace t)
-          (.set has-error? true)
-          (.countDown graphics-latch))))))
+      (cc/with-resource [graphics-renderer (make-graphics-renderer window width height) close-graphics-renderer]
+        (try
+          (.countDown graphics-latch)
+          (loop []
+            (when (not (GLFW/glfwWindowShouldClose window))
+              (graphics-renderer width height)
+              (BGFX/bgfx_frame false)))
+          (catch Throwable t
+            (.printStackTrace t)
+            (.set has-error? true)
+            (.countDown graphics-latch)))))))
 
 (defn -main [& args]
   (println "Starting")
@@ -119,10 +121,9 @@
     (cc/with-resource
       [repl (start-repl 12345) stop-repl 
        window (open-window width height) close-window
-       graphics-renderer (make-graphics-renderer window width height) close-graphics-renderer
        has-error? (AtomicBoolean.) nil
        graphics-latch (CountDownLatch. 1) nil
-       graphics-thread (make-graphics-thread window width height graphics-renderer graphics-latch has-error?) nil]
+       graphics-thread (make-graphics-thread window width height graphics-latch has-error?) nil]
       (println "Starting graphics thread")
       (.start graphics-thread)
       (loop [break? false]
