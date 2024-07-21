@@ -1,7 +1,9 @@
 (ns main
   "Also see Poster/main.clj"
   ;; after https://github.com/LWJGL/lwjgl3/blob/master/modules/samples/src/test/java/org/lwjgl/demo/bgfx/HelloBGFXMT.java
-  (:require [logo]
+  (:require [cider.nrepl]
+            [nrepl.server]
+            [logo]
             [comfort.core :as cc])
   (:import (java.util Objects)
            (java.util.function Consumer)
@@ -11,7 +13,21 @@
            (java.util.concurrent CountDownLatch TimeUnit)
            (java.util.concurrent.atomic AtomicBoolean)))
 
+(defn start-repl [port]
+  (println "Starting nREPL")
+  (try
+    (nrepl.server/start-server :port port :handler cider.nrepl/cider-nrepl-handler)
+    (catch Exception e
+      (println "Problem starting nREPL" (.getMessage e)))))
+
+(defn stop-repl [repl]
+  (try
+    (nrepl.server/stop-server repl)
+    (catch Exception e
+      (println "Problem stopping nREPL" (.getMessage e)))))
+
 (defn open-window [width height]
+  (println "Opening window")
   (.set (GLFWErrorCallback/createThrow))
   (assert (GLFW/glfwInit))
   (GLFW/glfwDefaultWindowHints)
@@ -40,6 +56,7 @@
   (.free (Objects/requireNonNull (GLFW/glfwSetErrorCallback nil))))
 
 (defn make-graphics-renderer [window width height]
+  (println "Making renderer")
   (cc/with-resource [stack (MemoryStack/stackPush) nil
                      init (BGFXInit/malloc stack) nil]
     (BGFX/bgfx_init_ctor init)
@@ -48,6 +65,7 @@
                           (.width o width)
                           (.height o height)
                           (.reset o BGFX/BGFX_RESET_VSYNC))))
+    (println "Checking platform")
     (condp = (Platform/get)
       Platform/LINUX
       (doto (.platformData init)
@@ -59,6 +77,7 @@
       Platform/WINDOWS
       (doto (.platformData init)
         (.nwh (org.lwjgl.glfw.GLFWNativeWin32/glfwGetWin32Window window))))
+    (println "Initialising bgfx")
     (assert (BGFX/bgfx_init init))
     (println "bgfx renderer:" (BGFX/bgfx_get_renderer_name (BGFX/bgfx_get_renderer_type)))
     (BGFX/bgfx_set_debug BGFX/BGFX_DEBUG_TEXT)
@@ -80,6 +99,7 @@
   (BGFX/bgfx_shutdown))
 
 (defn make-graphics-thread [window width height graphics-renderer graphics-latch has-error?]
+  (println "Making graphics thread")
   (Thread.
     (fn []
       (try
@@ -94,13 +114,16 @@
           (.countDown graphics-latch))))))
 
 (defn -main [& args]
+  (println "Starting")
   (let [width 1000 height 500]
     (cc/with-resource
-      [window (open-window width height) close-window
+      [repl (start-repl 12345) stop-repl 
+       window (open-window width height) close-window
        graphics-renderer (make-graphics-renderer window width height) close-graphics-renderer
        has-error? (AtomicBoolean.) nil
        graphics-latch (CountDownLatch. 1) nil
        graphics-thread (make-graphics-thread window width height graphics-renderer graphics-latch has-error?) nil]
+      (println "Starting graphics thread")
       (.start graphics-thread)
       (loop [break? false]
         (when-not break?
@@ -120,6 +143,9 @@
              (.printStackTrace e))))))
 
 (comment
+  ;; Windows, from emacs:
   ;;(setq cider-clojure-cli-global-options "-A:windows-x64")
+  ;; Mac, from cli:
+  ;; % clj -M:macos-x64 -m main
   (-main)
   )
