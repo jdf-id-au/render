@@ -254,9 +254,6 @@
 
 (defn logo []
   (let [buf (BufferUtils/createByteBuffer (count raw))]
-    (println "loading logo into buffer")
-    (doseq [[i b] (map-indexed vector raw)]
-      (when (zero? (mod i 10)) (print i))
-      (.put buf b))
-    (println "flipping")
+    (doseq [b raw] (.put buf (byte (- 0x80 b)))) ; two's complement for 2^7
     (.flip buf)))
+(memoize logo)
