@@ -3,6 +3,7 @@
   ;; after https://github.com/LWJGL/lwjgl3/blob/master/modules/samples/src/test/java/org/lwjgl/demo/bgfx/HelloBGFXMT.java
   (:require [cider.nrepl]
             [nrepl.server]
+            [util :refer [glfw bgfx]]
             [renderer]
             [comfort.core :as cc])
   (:import (java.util Objects)
@@ -30,38 +31,38 @@
   (println "Opening window")
   (.set (GLFWErrorCallback/createThrow))
   (assert (GLFW/glfwInit))
-  (GLFW/glfwDefaultWindowHints)
-  (GLFW/glfwWindowHint GLFW/GLFW_CLIENT_API, GLFW/GLFW_NO_API)
-  (GLFW/glfwWindowHint GLFW/GLFW_VISIBLE GLFW/GLFW_FALSE)
+  (glfw default-window-hints)
+  (glfw window-hint GLFW/GLFW_CLIENT_API, GLFW/GLFW_NO_API)
+  (glfw window-hint GLFW/GLFW_VISIBLE GLFW/GLFW_FALSE)
   (when (= (Platform/get) Platform/MACOSX)
-    (GLFW/glfwWindowHint GLFW/GLFW_COCOA_RETINA_FRAMEBUFFER GLFW/GLFW_FALSE))
+    (glfw window-hint GLFW/GLFW_COCOA_RETINA_FRAMEBUFFER GLFW/GLFW_FALSE))
   
-  (let [window (GLFW/glfwCreateWindow width height "bgfx?" MemoryUtil/NULL MemoryUtil/NULL)]
+  (let [window (glfw create-window width height "bgfx?" MemoryUtil/NULL MemoryUtil/NULL)]
     (assert window)
-    (GLFW/glfwSetKeyCallback window
+    (glfw set-key-callback window
       (reify GLFWKeyCallbackI
         (invoke [this window key scancode action mods]
           (case action
             GLFW/GLFW_RELEASE nil
             (case key
-              GLFW/GLFW_KEY_ESCAPE (GLFW/glfwSetWindowShouldClose window GLFW/GLFW_TRUE)
+              GLFW/GLFW_KEY_ESCAPE (glfw set-window-should-close window GLFW/GLFW_TRUE)
               nil)))))
     window))
 
 (defn close-window [window]
   (println "Closing window" window)
   (Callbacks/glfwFreeCallbacks window)
-  (GLFW/glfwDestroyWindow window)
-  (GLFW/glfwTerminate)
-  (.free (Objects/requireNonNull (GLFW/glfwSetErrorCallback nil)))
+  (glfw destroy-window window)
+  (glfw terminate)
+  (.free (Objects/requireNonNull (glfw set-error-callback nil)))
   (shutdown-agents))
 
 (defn make-graphics-renderer [window width height]
   (println "Making renderer")
   (cc/with-resource [stack (MemoryStack/stackPush) nil
                      init (BGFXInit/malloc stack) nil]
-    (BGFX/bgfx_init_ctor init)
-    (.resolution init (reify Consumer
+    (bgfx init-ctor init)
+    (.resolution init (reify Consumer ; does this mean it should detect change?
                         (accept [this o]
                           (.width o width)
                           (.height o height)
@@ -79,16 +80,16 @@
       (doto (.platformData init)
         (.nwh (org.lwjgl.glfw.GLFWNativeWin32/glfwGetWin32Window window))))
     (println "Initialising bgfx")
-    (assert (BGFX/bgfx_init init))
-    (println "bgfx renderer:" (BGFX/bgfx_get_renderer_name (BGFX/bgfx_get_renderer_type)))
-    (BGFX/bgfx_set_debug BGFX/BGFX_DEBUG_TEXT)
-    (BGFX/bgfx_set_view_clear 0 (bit-or BGFX/BGFX_CLEAR_COLOR BGFX/BGFX_CLEAR_DEPTH)
+    (assert (bgfx init init))
+    (println "bgfx renderer:" (bgfx get-renderer-name (bgfx get-renderer-type)))
+    (bgfx set-debug BGFX/BGFX_DEBUG_TEXT)
+    (bgfx set-view-clear 0 (bit-or BGFX/BGFX_CLEAR_COLOR BGFX/BGFX_CLEAR_DEPTH)
       0x303030ff 1.0 0)
     renderer/renderer*))
 
 (defn close-graphics-renderer [_]
   (println "Closing renderer")
-  (BGFX/bgfx_shutdown))
+  (bgfx shutdown))
 
 (defn make-graphics-thread [window width height graphics-latch has-error?]
   (println "Making graphics thread")
@@ -100,12 +101,14 @@
         (try
           (.countDown graphics-latch)
           (loop [] ; ────────────────────────────────────────────────── graphics
-            (when (not (GLFW/glfwWindowShouldClose window))
-              (try (@graphics-renderer window width height)
+            (when (not (glfw window-should-close window))
+              ;; TODO event handler which `bgfx_reset`s width and height
+              ;; and somehow gets it through to renderer
+              (try (@graphics-renderer width height)
                    (catch Throwable t
                      (.printStackTrace t)
                      (Thread/sleep 5000)))
-              (BGFX/bgfx_frame false)
+              (bgfx frame false)
               (recur))) ; full speed!
           (catch Throwable t
             (.printStackTrace t)
@@ -125,18 +128,18 @@
       (.start graphics-thread)
       (loop [break? false] ; await thread
         (when-not break?
-          (recur (try (GLFW/glfwPollEvents)
+          (recur (try (glfw poll-events)
                       (.await graphics-latch 16 TimeUnit/MILLISECONDS)
                       (catch InterruptedException e
                         (throw (IllegalStateException. e)))))))
       (println "Showing window")
-      (GLFW/glfwShowWindow window)
+      (glfw show-window window)
       (println "Event loop")
       (loop [] ; ───────────────────────────────────────────────────────── event
         (when (and
-                (not (GLFW/glfwWindowShouldClose window))
+                (not (glfw window-should-close window))
                 (not (.get has-error?)))
-          (GLFW/glfwWaitEvents) ; wait vs poll because graphics separate
+          (glfw wait-events) ; wait vs poll because graphics separate
           (recur)))
       (println "Shutdown")
       (try (.join graphics-thread)
