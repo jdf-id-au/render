@@ -3,13 +3,13 @@
   ;; after https://github.com/LWJGL/lwjgl3/blob/master/modules/samples/src/test/java/org/lwjgl/demo/bgfx/HelloBGFXMT.java
   (:require [cider.nrepl]
             [nrepl.server]
-            [util :refer [glfw bgfx]]
+            [util :refer [glfw GLFW bgfx BGFX]]
             [renderer]
             [comfort.core :as cc])
   (:import (java.util Objects)
            (java.util.function Consumer)
-           (org.lwjgl.glfw GLFW Callbacks GLFWErrorCallback GLFWKeyCallbackI)
-           (org.lwjgl.bgfx BGFX BGFXInit)
+           (org.lwjgl.glfw Callbacks GLFWErrorCallback GLFWKeyCallbackI)
+           (org.lwjgl.bgfx BGFXInit)
            (org.lwjgl.system Platform MemoryStack MemoryUtil)
            (java.util.concurrent CountDownLatch TimeUnit)
            (java.util.concurrent.atomic AtomicBoolean)))
@@ -30,22 +30,23 @@
 (defn open-window [width height]
   (println "Opening window")
   (.set (GLFWErrorCallback/createThrow))
-  (assert (GLFW/glfwInit))
+  (assert (glfw init))
   (glfw default-window-hints)
-  (glfw window-hint GLFW/GLFW_CLIENT_API, GLFW/GLFW_NO_API)
-  (glfw window-hint GLFW/GLFW_VISIBLE GLFW/GLFW_FALSE)
+  (glfw window-hint (GLFW client-api) (GLFW no-api))
+  (glfw window-hint (GLFW visible) (GLFW false))
   (when (= (Platform/get) Platform/MACOSX)
-    (glfw window-hint GLFW/GLFW_COCOA_RETINA_FRAMEBUFFER GLFW/GLFW_FALSE))
+    (glfw window-hint (GLFW cocoa-retina-framebuffer) (GLFW false)))
   
-  (let [window (glfw create-window width height "bgfx?" MemoryUtil/NULL MemoryUtil/NULL)]
+  (let [window (glfw create-window width height "cljbg" MemoryUtil/NULL MemoryUtil/NULL)]
     (assert window)
     (glfw set-key-callback window
       (reify GLFWKeyCallbackI
         (invoke [this window key scancode action mods]
-          (case action
-            GLFW/GLFW_RELEASE nil
-            (case key
-              GLFW/GLFW_KEY_ESCAPE (glfw set-window-should-close window GLFW/GLFW_TRUE)
+          (condp = action
+            (GLFW release)
+            nil
+            (condp =  key
+              (GLFW escape) (glfw set-window-should-close window (GLFW true))
               nil)))))
     window))
 
@@ -57,47 +58,13 @@
   (.free (Objects/requireNonNull (glfw set-error-callback nil)))
   (shutdown-agents))
 
-(defn make-graphics-renderer [window width height]
-  (println "Making renderer")
-  (cc/with-resource [stack (MemoryStack/stackPush) nil
-                     init (BGFXInit/malloc stack) nil]
-    (bgfx init-ctor init)
-    (.resolution init (reify Consumer ; does this mean it should detect change?
-                        (accept [this o]
-                          (.width o width)
-                          (.height o height)
-                          (.reset o BGFX/BGFX_RESET_VSYNC))))
-    (println "Checking platform")
-    (condp = (Platform/get)
-      Platform/LINUX
-      (doto (.platformData init)
-        (.ndt (org.lwjgl.glfw.GLFWNativeX11/glfwGetX11Display))
-        (.nwh (org.lwjgl.glfw.GLFWNativeX11/glfwGetX11Window window)))
-      Platform/MACOSX
-      (doto (.platformData init)
-        (.nwh (org.lwjgl.glfw.GLFWNativeCocoa/glfwGetCocoaWindow window)))
-      Platform/WINDOWS
-      (doto (.platformData init)
-        (.nwh (org.lwjgl.glfw.GLFWNativeWin32/glfwGetWin32Window window))))
-    (println "Initialising bgfx")
-    (assert (bgfx init init))
-    (println "bgfx renderer:" (bgfx get-renderer-name (bgfx get-renderer-type)))
-    (bgfx set-debug BGFX/BGFX_DEBUG_TEXT)
-    (bgfx set-view-clear 0 (bit-or BGFX/BGFX_CLEAR_COLOR BGFX/BGFX_CLEAR_DEPTH)
-      0x303030ff 1.0 0)
-    renderer/renderer*))
-
-(defn close-graphics-renderer [_]
-  (println "Closing renderer")
-  (bgfx shutdown))
-
-(defn make-graphics-thread [window width height graphics-latch has-error?]
+(defn make-graphics-thread [window width height
+                            graphics-latch has-error?]
   (println "Making graphics thread")
   (Thread.
     (fn []
-      (cc/with-resource [graphics-renderer
-                         (make-graphics-renderer window width height)
-                         close-graphics-renderer]
+      (cc/with-resource [environment (renderer/make-environment) (renderer/close-environment)
+                         graphics-renderer (renderer/make window width height) renderer/close]
         (try
           (.countDown graphics-latch)
           (loop [] ; ────────────────────────────────────────────────── graphics
@@ -123,7 +90,8 @@
        window (open-window width height) close-window
        has-error? (AtomicBoolean.) nil
        graphics-latch (CountDownLatch. 1) nil
-       graphics-thread (make-graphics-thread window width height graphics-latch has-error?) nil]
+       graphics-thread (make-graphics-thread window width height
+                         graphics-latch has-error?) nil]
       (println "Starting graphics thread")
       (.start graphics-thread)
       (loop [break? false] ; await thread
