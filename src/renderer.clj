@@ -24,11 +24,19 @@
 (reset! renderer* ; C-M-x this (or could add-watch to normal defn)
   (fn renderer [window width height]
     ;; Oddly blurry on mac at fullscreen (when not hovering over menu bar)
-    (BGFX/bgfx_set_view_rect 0 0 0 width height)
-    (BGFX/bgfx_touch 0)
-    (BGFX/bgfx_dbg_text_clear 0 false)
-    (let [x (int (- (max (/ width 2 8) 20) 20))
-          y (int (- (max (/ height 2 16) 16) 6))]
-      (BGFX/bgfx_dbg_text_image x y 40 12
-        (logo/logo) 160) ; TODO think about resource management, currently just memoized...
-      (BGFX/bgfx_dbg_text_printf 0 0 0x1f "25-c99 -> java -> clojure"))))
+    (Thread/sleep 500)
+    (let [dbg-cols (int (Math/floor (/ width 8)))
+          dbg-lines (int (Math/floor (/ height 16)))
+          [_ _ width height] (display-scale window)]
+      (BGFX/bgfx_set_view_rect 0 0 0 width height)
+      (BGFX/bgfx_touch 0)
+      (BGFX/bgfx_dbg_text_clear 0 false)
+      (let [n (count logo/raw) ; 4000
+            pitch 160 ; image pitch in bytes (4x number of cols?)
+            lines (/ n 160) ; 25? meaning?
+            x (int (/ (- dbg-cols 40) 2))
+            y (int (/ (- dbg-lines 12) 2))]
+        (println width height x y)
+        ;; Coords in characters not pixels
+        (BGFX/bgfx_dbg_text_printf 0 30 0x1f "25-c99 -> java -> clojure")
+        (BGFX/bgfx_dbg_text_image x y 40 12 (logo/logo) pitch)))))
