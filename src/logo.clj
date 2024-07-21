@@ -1,4 +1,4 @@
-(ns cljbg.logo
+(ns logo
   (:import (org.lwjgl BufferUtils)))
 
 (def raw [0xdc, 0x06, 0xdc, 0x06, 0xdc, 0x06, 0xdc, 0x06, 0x20, 0x0f, 0x20, 0x0f, 0x20, 0x0f, 0x20, 0x0f, ; ........ . . . .
@@ -254,5 +254,9 @@
 
 (defn logo []
   (let [buf (BufferUtils/createByteBuffer (count raw))]
-    (doseq [b raw] (.put buf b))
+    (println "loading logo into buffer")
+    (doseq [[i b] (map-indexed vector raw)]
+      (when (zero? (mod i 10)) (print i))
+      (.put buf b))
+    (println "flipping")
     (.flip buf)))
