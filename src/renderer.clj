@@ -1,11 +1,14 @@
 (ns renderer
   (:require [logo]
-            [util :refer [glfw GLFW bgfx BGFX]])
+            [util :refer [glfw GLFW bgfx BGFX]]
+            [comfort.core :as cc]
+            [clojure.java.io :as io])
   (:import (java.util Objects)
            (java.util.function Consumer)
            (org.lwjgl.glfw Callbacks GLFWErrorCallback GLFWKeyCallbackI)
            (org.lwjgl.bgfx BGFXInit
-             BGFXVertexLayout)
+             BGFXVertexLayout
+             BGFXReleaseFunctionCallback BGFXReleaseFunctionCallbackI)
            (org.lwjgl.system Platform MemoryStack MemoryUtil)
            (org.joml Vector3f)
            (java.util.concurrent CountDownLatch TimeUnit)
@@ -35,8 +38,7 @@
     (bgfx dbg-text-printf 0 0 0x1f (str cols "x" lines))
     #_(bgfx dbg-text-image  x y 40 12 (logo/logo) pitch)))
 
-;; Environment ─────────────────────────────────────────────────────────────────
-(defn make-vertex-layout [normals? colour? nUVs]
+(defn make-vertex-layout [normals? colour? nUVs] ; ─────────────────────── setup
   (let [layout (BGFXVertexLayout/calloc)]
     (bgfx vertex-layout-begin layout (bgfx get-renderer-type))
     (bgfx vertex-layout-add layout
@@ -57,38 +59,120 @@
   ([buffer layout]
    (bgfx create-vertex-buffer (bgfx make-ref buffer) layout (BGFX buffer-none)))
   ([buffer layout vertices]
-   (for [vertex vertices
-         attr vertex]
+   (doseq [vertex vertices
+           attr vertex]
+     (println "buffering" attr)
      (cond
-       (float? attr) (.putFloat buffer attr)
-       (integer? attr) (.putInteger buffer attr)))
+       (float? attr) (.putFloat buffer (float attr))
+       (integer? attr) (.putInt buffer (.toUnsignedLong attr)))) ; TODO get from long to unsigned long...
    (assert (zero? (.remaining buffer)))
    (.flip buffer)
-   (make-vertex-buffer buffer layout))
-  )
+   (println "Calling bgfx_create_vertex_buffer")
+   (make-vertex-buffer buffer layout)))
 
-(defn make-environment []
+(defn make-index-buffer [buffer indices]
+  (doseq [index indices] (.putShort buffer index))
+  (assert (zero? (.remaining buffer)))
+  (.flip buffer)
+  (bgfx create-index-buffer (bgfx make-ref buffer) (BGFX buffer-none)))
+
+(defn load-resource [path]
+  (let [r (io/resource path)
+        ;; memAlloc (C malloc, "off heap") vs BufferUtils/createByteBuffer ?
+        res (MemoryUtil/memAlloc (-> r .openConnection .getContentLength))]
+    (with-open [is (io/input-stream r)]
+      (loop [b (.read is)]
+        (when (not= b -1)
+          (.put res (util/cast->byte b))
+          (recur (.read is)))))
+    (.flip res)))
+
+(def release-memory-cb
+  (BGFXReleaseFunctionCallback/create
+    (reify BGFXReleaseFunctionCallbackI
+      (invoke [this ptr user-data] (MemoryUtil/nmemFree ptr)))))
+
+(defn load-shader [s]
+  (let [code (load-resource
+               (str "shaders/"
+                 (condp = (bgfx get-renderer-type)
+                   (BGFX renderer-type-direct3d12) "dx11/"
+                   (BGFX renderer-type-opengl) "glsl/"
+                   (BGFX renderer-type-metal) "metal/") s))]
+    (bgfx create-shader (bgfx make-ref-release code release-memory-cb nil))))
+
+(defn load-texture [s]
+  (let [data (load-resource (str "textures/" s))]
+    (bgfx create-texture
+      (bgfx make-ref-release data release-memory-cb nil)
+      (BGFX texture-none) 0 nil)))
+
+(def cube-vertices
+  [[-1. 1. 1. 0xff000000]
+   [1. 1. 1. 0xff0000ff]
+   [-1. -1. 1. 0xff00ff00]
+   [1. -1. 1. 0xff00ffff]
+   [-1. 1. -1. 0xffff0000]
+   [1. 1. -1. 0xffff00ff]
+   [-1. -1. -1. 0xffffff00]
+   [1. -1. -1. 0xffffffff]])
+
+(def cube-indices
+  [0 1 2
+   1 3 2
+   4 6 5
+   5 6 7
+   0 2 4
+   4 2 6
+   1 5 3
+   5 7 3
+   0 4 1
+   4 5 1
+   2 3 6
+   6 3 7])
+
+(defn setup []
+  (println "Setting up renderer") ; then segfault (run from cli to see)
   (let [layout (make-vertex-layout false true 0)
         vertices (MemoryUtil/memAlloc (* 8 (+ (* 3 4) 4)))
-        vbh (make-vertex-buffer vertices layout cube-vertices)]
+        vbh (make-vertex-buffer vertices layout cube-vertices)
+        _ (println "indices")
+        indices (MemoryUtil/memAlloc (* 2 (count cube-indices)))
+        _ (println "ibh")
+        ibh (make-index-buffer indices cube-indices)
+        _ (println "vs")
+        vs (load-shader "vs_cubes")
+        fs (load-shader "fs_cubes")
+        program (bgfx create-program vs fs true)
+        view-buf (MemoryUtil/memAllocFloat 16)
+        proj-buf (MemoryUtil/memAllocFloat 16)
+        model-buf (MemoryUtil/memAllocFloat 16)]
     {:layout layout
      :vertices vertices
-     :vbh ; vertex buffer handle?
-     :indices
-     :ibh
-     :vs
-     :fs
-     :program
-     :view-buf
-     :proj-buf
-     :model-buf
-     }))
+     :vbh vbh ; vertex buffer handle presumably
+     :indices indices
+     :ibh ibh
+     :vs vs
+     :fs fs
+     :program program
+     :view-buf view-buf
+     :proj-buf proj-buf
+     :model-buf model-buf}))
 
-(defn close-environment [env])
+(defn teardown [{:keys [view-buf proj-buf model-buf
+                        program ibh indices vbh vertices layout]}]
+  (println "Tearing down renderer")
+  (MemoryUtil/memFree view-buf)
+  (MemoryUtil/memFree proj-buf)
+  (MemoryUtil/memFree model-buf)
+  (bgfx destroy-program program)
+  (bgfx destroy-index-buffer ibh)
+  (MemoryUtil/memFree indices)
+  (bgfx destroy-vertex-buffer vbh)
+  (MemoryUtil/memFree vertices)
+  (.free layout))
 
-;; Renderer ────────────────────────────────────────────────────────────────────
-
-(defonce renderer* (atom nil))
+(defonce renderer* (atom nil)) ; ────────────────────────────────────── renderer
 (reset! renderer* ; C-M-x this (or could add-watch to normal defn)
   (fn renderer [width height]
     (Thread/sleep 500)

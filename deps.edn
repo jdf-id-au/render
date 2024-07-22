@@ -1,4 +1,4 @@
-{:paths ["src"]
+{:paths ["src" "resources"]
  :deps {org.clojure/clojure {:mvn/version "1.11.1"}
         org.lwjgl/lwjgl {:mvn/version "3.3.4"}
         org.lwjgl/lwjgl-glfw {:mvn/version "3.3.4"}

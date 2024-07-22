@@ -1,4 +1,5 @@
 (ns logo
+  (:require [util])
   (:import (org.lwjgl BufferUtils)))
 
 (def raw [0xdc, 0x06, 0xdc, 0x06, 0xdc, 0x06, 0xdc, 0x06, 0x20, 0x0f, 0x20, 0x0f, 0x20, 0x0f, 0x20, 0x0f, ; ........ . . . .
@@ -256,16 +257,8 @@
   (count raw) ;; => 4000
   )
 
-(defn cast->byte
-  "u8 0        ..127      ..128      ..255
-   i8 0        ..127      ..-128     ..-1
-   0b 0000 0000..0000 1111..0001 0000..1111 1111
-   0x 00       ..7f       ..80       ..ff"
-  [i]
-  (byte (if (> i Byte/MAX_VALUE) (- i  0x100) i)))
-
 (defn logo []
   (let [buf (BufferUtils/createByteBuffer (count raw))]
-    (doseq [b raw] (.put buf (cast->byte b)))
+    (doseq [b raw] (.put buf (util/cast->byte b)))
     (.flip buf)))
 (memoize logo)

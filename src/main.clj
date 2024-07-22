@@ -46,7 +46,7 @@
             (GLFW release)
             nil
             (condp =  key
-              (GLFW escape) (glfw set-window-should-close window (GLFW true))
+              (GLFW key-escape) (glfw set-window-should-close window (GLFW true))
               nil)))))
     window))
 
@@ -63,7 +63,8 @@
   (println "Making graphics thread")
   (Thread.
     (fn []
-      (cc/with-resource [environment (renderer/make-environment) (renderer/close-environment)
+      (println "Graphics thread running")
+      (cc/with-resource [renderer-setup (renderer/setup) (renderer/teardown)
                          graphics-renderer (renderer/make window width height) renderer/close]
         (try
           (.countDown graphics-latch)
@@ -115,7 +116,7 @@
              (.printStackTrace e))))))
 
 (comment
-  ;; Windows, from emacs:
+  ;; Windows, from emacs: M-:
   ;;(setq cider-clojure-cli-global-options "-A:windows-x64")
   ;; Mac, from cli:
   ;; % clj -M:macos-x64 -m main
