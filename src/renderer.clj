@@ -1,6 +1,7 @@
 (ns renderer
   (:require [logo]
             [util :refer [glfw GLFW bgfx BGFX]]
+            [clj-commons.primitive-math :as m]
             [comfort.core :as cc]
             [clojure.java.io :as io])
   (:import (java.util Objects)
@@ -63,8 +64,8 @@
            attr vertex]
      (println "buffering" attr)
      (cond
-       (float? attr) (.putFloat buffer (float attr))
-       (integer? attr) (.putInt buffer (.toUnsignedLong attr)))) ; TODO get from long to unsigned long...
+       (float? attr) (.putFloat buffer attr)
+       (integer? attr) (.putInt buffer attr)))
    (assert (zero? (.remaining buffer)))
    (.flip buffer)
    (println "Calling bgfx_create_vertex_buffer")
@@ -83,7 +84,7 @@
     (with-open [is (io/input-stream r)]
       (loop [b (.read is)]
         (when (not= b -1)
-          (.put res (util/cast->byte b))
+          (.put res (m/ubyte->byte b))
           (recur (.read is)))))
     (.flip res)))
 
@@ -180,6 +181,7 @@
     (bgfx set-view-rect 0 0 0 width height)
     
     (bgfx touch 0)
+    (bgfx dbg-text-printf 0 0 0x1f "sadness")
     
     
     ))

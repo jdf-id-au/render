@@ -1,5 +1,6 @@
 (ns logo
-  (:require [util])
+  (:require [util]
+            [clj-commons.primitive-math :as m])
   (:import (org.lwjgl BufferUtils)))
 
 (def raw [0xdc, 0x06, 0xdc, 0x06, 0xdc, 0x06, 0xdc, 0x06, 0x20, 0x0f, 0x20, 0x0f, 0x20, 0x0f, 0x20, 0x0f, ; ........ . . . .
@@ -259,6 +260,6 @@
 
 (defn logo []
   (let [buf (BufferUtils/createByteBuffer (count raw))]
-    (doseq [b raw] (.put buf (util/cast->byte b)))
+    (doseq [b raw] (.put buf (m/ubyte->byte b)))
     (.flip buf)))
 (memoize logo)

@@ -33,7 +33,8 @@
   (let [e# (symbol (str "org.lwjgl.glfw.GLFW/GLFW_" (-> enum-name (str/replace  \- \_) str/upper-case)))]
     `~e#))
 
-(defn cast->byte
+;; trying clj-commons/primitive-math instead
+#_(defn cast->byte
   "Cast u8 to i8 aka java byte.
    u8 0        ..127      ..128      ..255
    i8 0        ..127      ..-128     ..-1
@@ -41,3 +42,4 @@
    0x 00       ..7f       ..80       ..ff"
   [i]
   (byte (if (> i Byte/MAX_VALUE) (- i  0x100) i)))
+
