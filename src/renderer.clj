@@ -6,10 +6,12 @@
             [clojure.java.io :as io])
   (:import (java.util Objects)
            (java.util.function Consumer)
+           (java.nio.file Files)
            (org.lwjgl.glfw Callbacks GLFWErrorCallback GLFWKeyCallbackI)
            (org.lwjgl.bgfx BGFXInit
              BGFXVertexLayout
              BGFXReleaseFunctionCallback BGFXReleaseFunctionCallbackI)
+           (org.lwjgl BufferUtils)
            (org.lwjgl.system Platform MemoryStack MemoryUtil)
            (org.joml Vector3f)
            (java.util.concurrent CountDownLatch TimeUnit)
@@ -56,6 +58,15 @@
     (bgfx vertex-layout-end layout)
     layout))
 
+(comment
+  (def buf (MemoryUtil/memAlloc 16))
+  (def bg-ref (bgfx make-ref buf))
+  bg-ref
+  ;; ...that all works in repl
+  (def setup' (setup))
+  ;; ...no segfault in repl! something to do with thread?
+  )
+
 (defn make-vertex-buffer
   ([buffer layout]
    (println "Calling bgfx_create_vertex_buffer")
@@ -69,7 +80,10 @@
            (recur)))
        (.rewind buffer))
    ;; hmm https://stackoverflow.com/a/3731840/780743
-   (bgfx create-vertex-buffer (bgfx make-ref buffer) layout (BGFX buffer-none)))
+   (println "with a ref? on thread" (util/current-thread))
+   (let [r (bgfx make-ref buffer)] ; this is segfaulting from cli
+     (println "with a ref" r)
+     (bgfx create-vertex-buffer r layout (BGFX buffer-none))))
   ([buffer layout vertices]
    (doseq [vertex vertices
            attr vertex]
@@ -90,9 +104,9 @@
   (bgfx create-index-buffer (bgfx make-ref buffer) (BGFX buffer-none)))
 
 (defn load-resource [path]
-  (let [r (io/resource path)
+  (let [r (-> path io/resource io/file)
         ;; memAlloc (C malloc, "off heap") vs BufferUtils/createByteBuffer ?
-        res (MemoryUtil/memAlloc (-> r .openConnection .getContentLength))]
+        res (MemoryUtil/memAlloc (Files/size (.toPath r))y)]
     (with-open [is (io/input-stream r)]
       (loop [b (.read is)]
         (when (not= b -1)
@@ -111,8 +125,8 @@
                  (condp = (bgfx get-renderer-type)
                    (BGFX renderer-type-direct3d12) "dx11/"
                    (BGFX renderer-type-opengl) "glsl/"
-                   (BGFX renderer-type-metal) "metal/") s))]
-    (bgfx create-shader (bgfx make-ref-release code release-memory-cb nil))))
+                   (BGFX renderer-type-metal) "metal/") s ".bin"))]
+    (bgfx create-shader (bgfx make-ref-release code release-memory-cb 0)))) ; 0 is _userData void pointer aka long so not nil
 
 (defn load-texture [s]
   (let [data (load-resource (str "textures/" s))]
@@ -145,9 +159,12 @@
    6 3 7])
 
 (defn setup []
-  (println "Setting up renderer") ; then segfault (run from cli to see)
+  (println "Setting up renderer on thread" (util/current-thread))
   (let [layout (make-vertex-layout false true 0)
-        vertices (MemoryUtil/memAlloc (* 8 (+ (* 3 4) 4)))
+        vertices
+        #_(bgfx alloc (* 8 (+ (* 3 4) 4)))
+        (MemoryUtil/memAlloc (* 8 (+ (* 3 4) 4)))
+        #_(BufferUtils/createByteBuffer (* 8 (+ (* 3 4) 4)))
         vbh (make-vertex-buffer vertices layout cube-vertices)
         _ (println "indices")
         indices (MemoryUtil/memAlloc (* 2 (count cube-indices)))

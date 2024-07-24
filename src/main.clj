@@ -15,7 +15,7 @@
            (java.util.concurrent.atomic AtomicBoolean)))
 
 (defn start-repl [port]
-  (println "Starting cider-enabled nREPL on port" port)
+  (println "Starting cider-enabled nREPL on port" port "from thread" (util/current-thread))
   (try
     (nrepl.server/start-server :port port :handler cider.nrepl/cider-nrepl-handler)
     (catch Exception e
@@ -60,11 +60,11 @@
 
 (defn make-graphics-thread [window width height
                             graphics-latch has-error?]
-  (println "Making graphics thread")
+  (println "Making graphics thread from" (util/current-thread))
   (Thread.
     (fn []
-      (println "Graphics thread running")
-      (cc/with-resource [renderer-setup (renderer/setup) (renderer/teardown)
+      (println "Graphics thread running on" (util/current-thread))
+      (cc/with-resource [;renderer-setup (renderer/setup) (renderer/teardown)
                          graphics-renderer (renderer/make window width height) renderer/close]
         (try
           (.countDown graphics-latch)
@@ -87,7 +87,7 @@
   (println "Startup")
   (let [width 1000 height 500]
     (cc/with-resource
-      [repl (start-repl 12345) stop-repl 
+      [repl (start-repl 12345) stop-repl ; i.e. on main thread?
        window (open-window width height) close-window
        has-error? (AtomicBoolean.) nil
        graphics-latch (CountDownLatch. 1) nil

@@ -47,3 +47,6 @@
    u32 0       .. 65536    .. 4294967296"
   [i]
   (int (if (> i Integer/MAX_VALUE) (- i 0x100000000) i)))
+
+(defn current-thread []
+  (.getName (Thread/currentThread)))
