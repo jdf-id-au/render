@@ -58,17 +58,29 @@
 
 (defn make-vertex-buffer
   ([buffer layout]
+   (println "Calling bgfx_create_vertex_buffer")
+   #_(do ; buffer looks fine
+       (println (.position buffer) \/ (.limit buffer)
+         \: (.remaining buffer) (.hasRemaining buffer))
+       (loop []
+         (when (.hasRemaining buffer)
+           (print (.getFloat buffer)(.getFloat buffer)(.getFloat buffer)(.getInt buffer))
+           (println)
+           (recur)))
+       (.rewind buffer))
+   ;; hmm https://stackoverflow.com/a/3731840/780743
    (bgfx create-vertex-buffer (bgfx make-ref buffer) layout (BGFX buffer-none)))
   ([buffer layout vertices]
    (doseq [vertex vertices
            attr vertex]
-     (println "buffering" attr)
-     (cond
-       (float? attr) (.putFloat buffer attr)
-       (integer? attr) (.putInt buffer attr)))
+     #_(println "buffering" (type attr) attr)
+     (condp = (type attr)
+       Double (.putFloat buffer (unchecked-float attr)) ; `1.` literals are Double
+       Long (.putInt buffer (unchecked-int attr))
+       Float (.putFloat buffer attr)
+       Integer (.putInt buffer attr)))
    (assert (zero? (.remaining buffer)))
    (.flip buffer)
-   (println "Calling bgfx_create_vertex_buffer")
    (make-vertex-buffer buffer layout)))
 
 (defn make-index-buffer [buffer indices]
@@ -109,14 +121,14 @@
       (BGFX texture-none) 0 nil)))
 
 (def cube-vertices
-  [[-1. 1. 1. 0xff000000]
-   [1. 1. 1. 0xff0000ff]
-   [-1. -1. 1. 0xff00ff00]
-   [1. -1. 1. 0xff00ffff]
-   [-1. 1. -1. 0xffff0000]
-   [1. 1. -1. 0xffff00ff]
+  [[-1.  1.  1. 0xff000000] ;; Double Double Double Long
+   [ 1.  1.  1. 0xff0000ff]
+   [-1. -1.  1. 0xff00ff00]
+   [ 1. -1.  1. 0xff00ffff]
+   [-1.  1. -1. 0xffff0000]
+   [ 1.  1. -1. 0xffff00ff]
    [-1. -1. -1. 0xffffff00]
-   [1. -1. -1. 0xffffffff]])
+   [ 1. -1. -1. 0xffffffff]])
 
 (def cube-indices
   [0 1 2
@@ -202,6 +214,7 @@
       (doto (.platformData init)
         (.ndt (org.lwjgl.glfw.GLFWNativeX11/glfwGetX11Display))
         (.nwh (org.lwjgl.glfw.GLFWNativeX11/glfwGetX11Window window)))
+      ;; TODO getWaylandDisplay
       Platform/MACOSX
       (doto (.platformData init)
         (.nwh (org.lwjgl.glfw.GLFWNativeCocoa/glfwGetCocoaWindow window)))

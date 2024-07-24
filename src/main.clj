@@ -64,7 +64,7 @@
   (Thread.
     (fn []
       (println "Graphics thread running")
-      (cc/with-resource [;renderer-setup (renderer/setup) (renderer/teardown)
+      (cc/with-resource [renderer-setup (renderer/setup) (renderer/teardown)
                          graphics-renderer (renderer/make window width height) renderer/close]
         (try
           (.countDown graphics-latch)
