@@ -58,29 +58,10 @@
     (bgfx vertex-layout-end layout)
     layout))
 
-(comment
-  (def buf (MemoryUtil/memAlloc 16))
-  (def bg-ref (bgfx make-ref buf))
-  bg-ref
-  (def setup' (setup))
-  )
-
 (defn make-vertex-buffer
   ([buffer layout]
    (println "Calling bgfx_create_vertex_buffer")
-   #_(do ; buffer looks fine
-       (println (.position buffer) \/ (.limit buffer)
-         \: (.remaining buffer) (.hasRemaining buffer))
-       (loop []
-         (when (.hasRemaining buffer)
-           (print (.getFloat buffer)(.getFloat buffer)(.getFloat buffer)(.getInt buffer))
-           (println)
-           (recur)))
-       (.rewind buffer))
-   ;; hmm https://stackoverflow.com/a/3731840/780743
-   (println "with a ref? on thread" (util/current-thread))
-   (let [r (bgfx make-ref buffer)] ; this is segfaulting from cli
-     (println "with a ref" r)
+   (let [r (bgfx make-ref buffer)]
      (bgfx create-vertex-buffer r layout (BGFX buffer-none))))
   ([buffer layout vertices]
    (doseq [vertex vertices
@@ -160,16 +141,10 @@
 (defn setup []
   (println "Setting up renderer on thread" (util/current-thread))
   (let [layout (make-vertex-layout false true 0)
-        vertices
-        #_(bgfx alloc (* 8 (+ (* 3 4) 4)))
-        (MemoryUtil/memAlloc (* 8 (+ (* 3 4) 4)))
-        #_(BufferUtils/createByteBuffer (* 8 (+ (* 3 4) 4)))
+        vertices (MemoryUtil/memAlloc (* 8 (+ (* 3 4) 4)))
         vbh (make-vertex-buffer vertices layout cube-vertices)
-        _ (println "indices")
         indices (MemoryUtil/memAlloc (* 2 (count cube-indices)))
-        _ (println "ibh")
         ibh (make-index-buffer indices cube-indices)
-        _ (println "vs")
         vs (load-shader "vs_cubes")
         fs (load-shader "fs_cubes")
         program (bgfx create-program vs fs true)
@@ -202,7 +177,8 @@
   (.free layout))
 
 (defonce renderer* (atom nil)) ; ────────────────────────────────────── renderer
-(reset! renderer* ; C-M-x this (or could add-watch to normal defn)
+(reset! renderer* ; C-M-x this
+  ;; add-watch to normal defn is less suitable because of threading
   (fn renderer [width height {:keys [view-buf proj-buf model-buf
                                      vbh ibh program]:as setup}]
     (bgfx set-view-rect 0 0 0 width height)
@@ -210,7 +186,7 @@
     (bgfx dbg-text-printf 0 0 0x1f (str (glfw get-timer-value)))
 
     (let [at (Vector3f. 0. 0. 0.)
-          eye (Vector3f. 0. 0. 0.)
+          eye (Vector3f. 0. 0. -35.)
           view (doto (Matrix4x3f.)
                  (.setLookAtLH
                    (.x eye) (.y eye) (.z eye)
@@ -248,8 +224,7 @@
         (bgfx encoder-set-state encoder (BGFX state-default) 0)
         (bgfx encoder-submit encoder 0 program 0 0))
       
-      (bgfx encoder-end encoder))
-    (Thread/sleep 500)))
+      (bgfx encoder-end encoder))))
 
 (defn make [window width height]
   (println "Making renderer")

@@ -86,7 +86,7 @@
 
 (defn -main [& args]
   (println "Startup")
-  (let [width 1000 height 500]
+  (let [width 1920 height 1200]
     (cc/with-resource
       [repl (start-repl 12345) stop-repl ; i.e. on main thread?
        window (open-window width height) close-window
