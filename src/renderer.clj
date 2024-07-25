@@ -106,7 +106,7 @@
 (defn load-resource [path]
   (let [r (-> path io/resource io/file)
         ;; memAlloc (C malloc, "off heap") vs BufferUtils/createByteBuffer ?
-        res (MemoryUtil/memAlloc (Files/size (.toPath r))y)]
+        res (MemoryUtil/memAlloc (Files/size (.toPath r)))]
     (with-open [is (io/input-stream r)]
       (loop [b (.read is)]
         (when (not= b -1)
@@ -123,6 +123,7 @@
   (let [code (load-resource
                (str "shaders/"
                  (condp = (bgfx get-renderer-type)
+                   (BGFX renderer-type-direct3d11) "dx11/"
                    (BGFX renderer-type-direct3d12) "dx11/"
                    (BGFX renderer-type-opengl) "glsl/"
                    (BGFX renderer-type-metal) "metal/") s ".bin"))]
@@ -210,7 +211,7 @@
     (bgfx set-view-rect 0 0 0 width height)
     
     (bgfx touch 0)
-    (bgfx dbg-text-printf 0 0 0x1f "sadness")
+    (bgfx dbg-text-printf 0 0 0x1f "yay")
     
     
     ))
