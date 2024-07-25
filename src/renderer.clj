@@ -13,7 +13,7 @@
              BGFXReleaseFunctionCallback BGFXReleaseFunctionCallbackI)
            (org.lwjgl BufferUtils)
            (org.lwjgl.system Platform MemoryStack MemoryUtil)
-           (org.joml Vector3f)
+           (org.joml Matrix4f Matrix4x3f Vector3f)
            (java.util.concurrent CountDownLatch TimeUnit)
            (java.util.concurrent.atomic AtomicBoolean)))
 
@@ -62,9 +62,7 @@
   (def buf (MemoryUtil/memAlloc 16))
   (def bg-ref (bgfx make-ref buf))
   bg-ref
-  ;; ...that all works in repl
   (def setup' (setup))
-  ;; ...no segfault in repl! something to do with thread?
   )
 
 (defn make-vertex-buffer
@@ -205,16 +203,53 @@
 
 (defonce renderer* (atom nil)) ; ────────────────────────────────────── renderer
 (reset! renderer* ; C-M-x this (or could add-watch to normal defn)
-  (fn renderer [width height]
-    (Thread/sleep 500)
-    
+  (fn renderer [width height {:keys [view-buf proj-buf model-buf
+                                     vbh ibh program]:as setup}]
     (bgfx set-view-rect 0 0 0 width height)
-    
     (bgfx touch 0)
-    (bgfx dbg-text-printf 0 0 0x1f "yay")
-    
-    
-    ))
+    (bgfx dbg-text-printf 0 0 0x1f (str (glfw get-timer-value)))
+
+    (let [at (Vector3f. 0. 0. 0.)
+          eye (Vector3f. 0. 0. 0.)
+          view (doto (Matrix4x3f.)
+                 (.setLookAtLH
+                   (.x eye) (.y eye) (.z eye)
+                   (.x at) (.y at) (.z at)
+                   0. 1. 0.))
+          
+          fov 60. near 0.1 far 100.
+          fov-radians (-> fov (* Math/PI) (/ 180))
+          aspect (/ width (float height))
+          proj (doto (Matrix4f.)
+                 (.setPerspectiveLH fov-radians aspect near far
+                   (not (.homogeneousDepth (bgfx get-caps)))))
+
+          _ (bgfx set-view-transform 0
+                  (.get4x4 view view-buf)
+                  (.get proj proj-buf))
+
+          time 0
+          encoder (bgfx encoder-begin false)
+          ]
+      (doseq [yy (range 12) xx (range 12)]
+        (bgfx encoder-set-transform encoder
+              (-> (Matrix4x3f.)
+                (.translation
+                  (-> xx (* 3.) (- 15))
+                  (-> yy (* 3.) (- 15))
+                  0.)
+                (.rotateXYZ
+                  (-> xx (* 0.21) (+ time))
+                  (-> yy (* 0.37) (+ time))
+                  0.)
+                (.get4x4 model-buf)))
+        (bgfx encoder-set-vertex-buffer encoder 0 vbh 0 8)
+        (bgfx encoder-set-index-buffer encoder ibh 0 36)
+        (bgfx encoder-set-state encoder (BGFX state-default) 0)
+        (bgfx encoder-submit encoder 0 program 0 0))
+      
+      (bgfx encoder-end encoder))
+    (Thread/sleep 500)))
 
 (defn make [window width height]
   (println "Making renderer")

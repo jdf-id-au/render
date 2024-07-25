@@ -73,7 +73,7 @@
             (when (not (glfw window-should-close window))
               ;; TODO event handler which `bgfx_reset`s width and height
               ;; and somehow gets it through to renderer
-              (try (@graphics-renderer width height)
+              (try (@graphics-renderer width height renderer-setup)
                    (catch Throwable t
                      (.printStackTrace t)
                      (Thread/sleep 5000)))
