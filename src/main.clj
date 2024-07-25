@@ -4,6 +4,7 @@
   (:require [cider.nrepl]
             [nrepl.server]
             [util :refer [glfw GLFW bgfx BGFX]]
+            [clj-commons.primitive-math :as m]
             [renderer]
             [comfort.core :as cc])
   (:import (java.util Objects)
@@ -45,8 +46,8 @@
           (condp = action
             (GLFW release)
             nil
-            (condp =  key
-              (GLFW key-escape) (glfw set-window-should-close window (GLFW true))
+            (condp = key
+              (GLFW key-escape) (glfw set-window-should-close window true)
               nil)))))
     window))
 
@@ -65,20 +66,24 @@
     (fn []
       (println "Graphics thread running on" (util/current-thread))
       (cc/with-resource [graphics-renderer (renderer/make window width height) renderer/close
-                         renderer-setup (renderer/setup) (renderer/teardown)
-                         ]
+                         renderer-setup (renderer/setup) renderer/teardown
+                         start-time (glfw get-timer-value) nil]
         (try
           (.countDown graphics-latch)
-          (loop [] ; ────────────────────────────────────────────────── graphics
+          (loop [frame-time 0] ; ──────────────────────── graphics
             (when (not (glfw window-should-close window))
               ;; TODO event handler which `bgfx_reset`s width and height
               ;; and somehow gets it through to renderer
-              (try (@graphics-renderer width height renderer-setup)
-                   (catch Throwable t
-                     (.printStackTrace t)
-                     (Thread/sleep 5000)))
-              (bgfx frame false)
-              (recur))) ; full speed!
+              (let [pre (glfw get-timer-value)
+                    freq (glfw get-timer-frequency)
+                    period-ms (/ 1000. freq)
+                    time (case freq 0 0 (-> pre (- start-time) (/ freq) float))]
+                (try (@graphics-renderer width height time renderer-setup)
+                     (catch Throwable t
+                       (.printStackTrace t)
+                       (Thread/sleep 5000)))
+                (bgfx frame false)
+                (recur (- pre (glfw get-timer-value)))))) ; full speed!
           (catch Throwable t
             (.printStackTrace t)
             (.set has-error? true)

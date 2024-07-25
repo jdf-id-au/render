@@ -12,8 +12,7 @@
   "Briefer enums"
   {:clj-kondo/ignore [:unresolved-symbol]}
   [enum-name]
-  (let [e# (symbol (str "org.lwjgl.bgfx.BGFX/BGFX_" (-> enum-name (str/replace \- \_) str/upper-case)))]
-    `~e#))
+  (symbol (str "org.lwjgl.bgfx.BGFX/BGFX_" (-> enum-name (str/replace \- \_) str/upper-case))))
 
 (defn kebab->pascal [s]
   (let [segs (str/split (str s) #"-")]
@@ -30,8 +29,7 @@
   "Briefer enums" ; via `public static final long`?
   {:clj-kondo/ignore [:unresolved-symbol]}
   [enum-name]
-  (let [e# (symbol (str "org.lwjgl.glfw.GLFW/GLFW_" (-> enum-name (str/replace  \- \_) str/upper-case)))]
-    `~e#))
+  (symbol (str "org.lwjgl.glfw.GLFW/GLFW_" (-> enum-name (str/replace  \- \_) str/upper-case))))
 
 #_(defn cast->byte
   "Cast u8 to i8 aka java byte.

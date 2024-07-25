@@ -179,21 +179,22 @@
 (defonce renderer* (atom nil)) ; ────────────────────────────────────── renderer
 (reset! renderer* ; C-M-x this
   ;; add-watch to normal defn is less suitable because of threading
-  (fn renderer [width height {:keys [view-buf proj-buf model-buf
-                                     vbh ibh program]:as setup}]
+  (fn renderer [width height time
+                {:keys [view-buf proj-buf model-buf vbh ibh program]
+                 :as setup}]
     (bgfx set-view-rect 0 0 0 width height)
     (bgfx touch 0)
-    (bgfx dbg-text-printf 0 0 0x1f (str (glfw get-timer-value)))
+    (bgfx dbg-text-printf 0 0 0x1f (str time))
 
     (let [at (Vector3f. 0. 0. 0.)
-          eye (Vector3f. 0. 0. -35.)
+          eye (Vector3f. 0. (* 30 (Math/sin time)) -35. )
           view (doto (Matrix4x3f.)
                  (.setLookAtLH
                    (.x eye) (.y eye) (.z eye)
                    (.x at) (.y at) (.z at)
                    0. 1. 0.))
           
-          fov 60. near 0.1 far 100.
+          fov (* 60. #_(Math/sin time)) near 0.1 far 100.
           fov-radians (-> fov (* Math/PI) (/ 180))
           aspect (/ width (float height))
           proj (doto (Matrix4f.)
@@ -204,7 +205,6 @@
                   (.get4x4 view view-buf)
                   (.get proj proj-buf))
 
-          time 0
           encoder (bgfx encoder-begin false)
           ]
       (doseq [yy (range 12) xx (range 12)]
