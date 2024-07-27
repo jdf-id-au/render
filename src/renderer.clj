@@ -186,7 +186,7 @@
   (bgfx dbg-text-printf 0 0 0x1f (str frame-time))
 
   (let [at (Vector3f. 0. 0. 0.)
-        eye (Vector3f. 0. (* 30 (Math/sin time)) -35. )
+        eye (Vector3f. (* 10 (Math/tan time)) (* 30 (Math/sin time)) -35. )
         view (doto (Matrix4x3f.)
                (.setLookAtLH
                  (.x eye) (.y eye) (.z eye)

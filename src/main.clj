@@ -82,14 +82,11 @@
          (try 
            (cc/with-resource [renderer (renderer/make window width height) renderer/close
                               setup (renderer/setup) renderer/teardown]
-             (swap! status assoc
-               :started (glfw get-timer-value)
-               :renderer renderer)
-             (reset! refresh-thread! (fn []
-                                       (swap! status dissoc :renderer)
-                                       (glfw post-empty-event)))
-             (reset! renderer/refresh! (fn [] ; TODO check rebinds
-                                         (swap! status assoc :renderer renderer/renderer)))
+             (swap! status assoc :renderer renderer :started (glfw get-timer-value))
+             (reset! refresh-thread!
+               (fn [] (swap! status dissoc :renderer) (glfw post-empty-event)))
+             (reset! renderer/refresh!
+               (fn [] (swap! status assoc :renderer renderer/renderer)))
              (loop [frame-time 0] ; ──────────────────────────────── render loop
                (cond
                  (glfw window-should-close window) ; NB also checked in event loop
@@ -118,7 +115,7 @@
              (swap! status assoc :startup-error (Throwable->map t))))))
      :status status})) ; could add-watch, or just close the window...
 
-;; FIXME printlns unseen
+;; these printlns appear in REPL
 (add-watch #'make-graphics-thread :refresh
   (fn [k r o n] (println "Refreshing graphics thread") (@refresh-thread!)))
 (add-watch #'renderer/setup :refresh
