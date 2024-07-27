@@ -42,7 +42,7 @@
     (assert window)
     (glfw set-key-callback window
       (reify GLFWKeyCallbackI
-        (invoke [this window key scancode action mods]
+        (invoke [this window key scancode action mods] ; could be dynamic with indirection
           (condp = action
             (GLFW release)
             nil
@@ -70,7 +70,7 @@
                          start-time (glfw get-timer-value) nil]
         (try
           (.countDown graphics-latch)
-          (loop [frame-time 0] ; ──────────────────────── graphics
+          (loop [frame-time 0] ; graphics
             (when (not (glfw window-should-close window))
               ;; TODO event handler which `bgfx_reset`s width and height
               ;; and somehow gets it through to renderer
@@ -89,19 +89,25 @@
             (.set has-error? true)
             (.countDown graphics-latch)))))))
 
+(defn join-graphics-thread [t]
+  (println "Joining graphics thread")
+  (try (.join t)
+           (catch InterruptedException e
+             (.printStackTrace e))))
+
 (defn -main [& args]
   (println "Startup")
   (let [width 1920 height 1200]
     (cc/with-resource
-      [repl (start-repl 12345) stop-repl ; i.e. on main thread?
+      [repl (start-repl 12345) stop-repl
        window (open-window width height) close-window
        has-error? (AtomicBoolean.) nil
        graphics-latch (CountDownLatch. 1) nil
        graphics-thread (make-graphics-thread window width height
-                         graphics-latch has-error?) nil]
+                         graphics-latch has-error?) join-graphics-thread]
       (println "Starting graphics thread")
-      (.start graphics-thread)
-      (loop [break? false] ; await thread
+      (.start graphics-thread) ; todo ability to redefine/resetup
+      (loop [break? false] ; await renderer startup
         (when-not break?
           (recur (try (glfw poll-events)
                       (.await graphics-latch 16 TimeUnit/MILLISECONDS)
@@ -115,11 +121,7 @@
                 (not (glfw window-should-close window))
                 (not (.get has-error?)))
           (glfw wait-events) ; wait vs poll because graphics separate
-          (recur)))
-      (println "Shutdown")
-      (try (.join graphics-thread)
-           (catch InterruptedException e
-             (.printStackTrace e))))))
+          (recur))))))
 
 (comment
   ;; Windows, from emacs: M-:

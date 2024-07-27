@@ -60,7 +60,6 @@
 
 (defn make-vertex-buffer
   ([buffer layout]
-   (println "Calling bgfx_create_vertex_buffer")
    (let [r (bgfx make-ref buffer)]
      (bgfx create-vertex-buffer r layout (BGFX buffer-none))))
   ([buffer layout vertices]
