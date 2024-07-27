@@ -84,10 +84,12 @@
                               setup (renderer/setup) renderer/teardown]
              (swap! status assoc
                :started (glfw get-timer-value)
-               :fresh? true)
+               :renderer renderer)
              (reset! refresh-thread! (fn []
-                                       (swap! status assoc :fresh? false)
+                                       (swap! status dissoc :renderer)
                                        (glfw post-empty-event)))
+             (reset! renderer/refresh! (fn [] ; TODO check rebinds
+                                         (swap! status assoc :renderer renderer/renderer)))
              (loop [frame-time 0] ; ──────────────────────────────── render loop
                (cond
                  (glfw window-should-close window) ; NB also checked in event loop
@@ -95,7 +97,7 @@
                    :stopped (glfw get-timer-value)
                    :close? true)
 
-                 (:fresh? @status)
+                 (:renderer @status)
                  (do
                    ;; TODO event handler which `bgfx_reset`s width and height
                    ;; and somehow gets it through to renderer
@@ -103,7 +105,7 @@
                          freq (glfw get-timer-frequency)
                          period-ms (/ 1000. freq)
                          time (case freq 0 0 (-> pre (- (:started @status)) (/ freq) float))]
-                     (try (renderer setup status width height time (* frame-time period-ms))
+                     (try ((:renderer @status) setup status width height time (* frame-time period-ms))
                           (bgfx frame false)
                           (catch Throwable t
                             (pprint t)
@@ -116,15 +118,13 @@
              (swap! status assoc :startup-error (Throwable->map t))))))
      :status status})) ; could add-watch, or just close the window...
 
+;; FIXME printlns unseen
 (add-watch #'make-graphics-thread :refresh
   (fn [k r o n] (println "Refreshing graphics thread") (@refresh-thread!)))
+(add-watch #'renderer/setup :refresh
+  (fn [k r o n] (println "Refreshing graphics thread for renderer setup") (@refresh-thread!)))
 (add-watch #'renderer/renderer :refresh
-  (fn [k r o n] (println "Refreshing graphics thread for renderer") (@refresh-thread!)))
-
-(comment
-  ;; TODO ideally not reset state i.e. just update renderer itself?
-  (remove-watch #'renderer/renderer :refresh)
-  )
+  (fn [k r o n] (println "Refreshing renderer") (@renderer/refresh!)))
 
 (defn join-graphics-thread [{:keys [thread]}]
   (println "Joining graphics thread") ; ...expecting it to die
@@ -161,14 +161,14 @@
                         (println "Showing window")
                         (glfw show-window window)
                         (println "Event loop")
-                        (loop [{:keys [fresh?]} @status] ; ────────── event loop
+                        (loop [{:keys [renderer]} @status] ; ────────── event loop
                           (cond
                             ;; Exit event loop, close window, possibly retry
                             (glfw window-should-close window) ; NB also checked in render loop
                             (swap! status assoc :close? true)
 
                             ;; Continue event loop, consume events even if renderer-error
-                            fresh?
+                            renderer
                             (do (glfw wait-events) ; not poll; graphics thread separate
                                 (recur @status))
 

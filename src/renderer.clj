@@ -175,7 +175,10 @@
   (MemoryUtil/memFree vertices)
   (.free layout))
 
-(defn renderer ; ══════════════════════════════════════════════════════ renderer
+(defonce refresh! ; ═══════════════════════════════════════════════════ renderer
+  (atom (fn [] (throw (ex-info "No renderer refresher yet" {})))))
+
+(defn renderer
   [{:keys [view-buf proj-buf model-buf vbh ibh program] :as setup}
    status width height time frame-time]
   (bgfx set-view-rect 0 0 0 width height)
