@@ -175,15 +175,15 @@
   (MemoryUtil/memFree vertices)
   (.free layout))
 
-(defonce renderer* (atom nil)) ; ────────────────────────────────────── renderer
-(reset! renderer* ; C-M-x this
+(defonce renderer-fn* (atom nil)) ; ────────────────────────────────────── renderer
+(reset! renderer-fn* ; C-M-x this
   ;; add-watch to normal defn is less suitable because of threading
-  (fn renderer [width height time
+  (fn renderer [width height time frame-time
                 {:keys [view-buf proj-buf model-buf vbh ibh program]
                  :as setup}]
     (bgfx set-view-rect 0 0 0 width height)
     (bgfx touch 0)
-    (bgfx dbg-text-printf 0 0 0x1f (str time))
+    (bgfx dbg-text-printf 0 0 0x1f (str frame-time))
 
     (let [at (Vector3f. 0. 0. 0.)
           eye (Vector3f. 0. (* 30 (Math/sin time)) -35. )
@@ -225,7 +225,9 @@
       
       (bgfx encoder-end encoder))))
 
-(defn make [window width height]
+(defn make
+  "Initialise BGFX and configure window. Return renderer-fn atom."
+  [window width height]
   (println "Making renderer")
   (cc/with-resource [stack (MemoryStack/stackPush) nil
                      init (BGFXInit/malloc stack) nil]
@@ -254,7 +256,7 @@
     (bgfx set-debug (BGFX debug-text))
     (bgfx set-view-clear 0 (bit-or (BGFX clear-color) (BGFX clear-depth))
       0x303030ff 1.0 0)
-    renderer*))
+    renderer-fn*))
 
 (defn close [_]
   (println "Closing renderer")
