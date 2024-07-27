@@ -91,16 +91,16 @@
                          freq (glfw get-timer-frequency)
                          period-ms (/ 1000. freq)
                          time (case freq 0 0 (-> pre (- (:started @status)) (/ freq) float))]
-                     (try (@renderer width height time (* frame-time period-ms) setup)
+                     (try (@renderer setup status width height time (* frame-time period-ms))
                           (bgfx frame false)
                           (catch Throwable t
                             (pprint t)
-                            (println "Retrying in 5s")
+                            (println "Renderer error; retrying in 5s")
                             (Thread/sleep 5000)))
                      (recur (- (glfw get-timer-value) pre))))))) ; full speed!
            (catch Throwable t
              (swap! status assoc :startup-error (Throwable->map t))))))
-     :status status}))
+     :status status})) ; could add-watch, or just close the window...
 
 (defn join-graphics-thread [{:keys [thread]}]
   (println "Joining graphics thread") ; ...expecting it to die
@@ -155,7 +155,7 @@
 
                         (:startup-error @status)
                         (do (pprint (:startup-error @status))
-                            (println "Retrying in 5s")
+                            (println "Graphics thread startup error; retrying in 5s")
                             (Thread/sleep 5000)
                             @status))))))))
           (recur))))))

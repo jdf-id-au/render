@@ -178,9 +178,10 @@
 (defonce renderer-fn* (atom nil)) ; ────────────────────────────────────── renderer
 (reset! renderer-fn* ; C-M-x this
   ;; add-watch to normal defn is less suitable because of threading
-  (fn renderer [width height time frame-time
-                {:keys [view-buf proj-buf model-buf vbh ibh program]
-                 :as setup}]
+  (fn renderer [{:keys [view-buf proj-buf model-buf vbh ibh program]
+                 :as setup}
+                status
+                width height time frame-time]
     (bgfx set-view-rect 0 0 0 width height)
     (bgfx touch 0)
     (bgfx dbg-text-printf 0 0 0x1f (str frame-time))
