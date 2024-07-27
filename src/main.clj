@@ -18,7 +18,7 @@
            (java.util.concurrent CountDownLatch TimeUnit)
            (java.util.concurrent.atomic AtomicBoolean)))
 
-(defn start-repl [port]
+(defn start-repl [port] ; ═════════════════════════════════════════════════ REPL
   (println "Starting cider-enabled nREPL on port" port "from thread" (util/current-thread))
   (try
     (nrepl.server/start-server :port port :handler cider.nrepl/cider-nrepl-handler)
@@ -32,7 +32,7 @@
       (println "Problem stopping nREPL" (.getMessage e))))
   (shutdown-agents))
 
-(defn open-glfw-session []
+(defn open-glfw-session [] ; ══════════════════════════════════════════════ GLFW
   (.set (GLFWErrorCallback/createThrow))
   (assert (glfw init))
   (glfw default-window-hints)
@@ -66,8 +66,14 @@
   (Callbacks/glfwFreeCallbacks window)
   (glfw destroy-window window))
 
+(defonce retry-on-window-close? (atom true)) ; without quitting REPL and JVM
+
+(defonce refresh-thread! ; ═════════════════════════════════════ graphics thread
+  ;; TODO could eventually track multiple threads/windows...
+  (atom (fn [] (throw (ex-info "No thread refresher yet" {})))))
+
 (defn make-graphics-thread [window width height]
-  (println "Making graphics thread from" (util/current-thread))
+  (println "🎨 Making graphics thread from" (util/current-thread))
   (let [status (atom nil)]
     {:thread
      (Thread.
@@ -79,11 +85,17 @@
              (swap! status assoc
                :started (glfw get-timer-value)
                :fresh? true)
+             (reset! refresh-thread! (fn []
+                                       (swap! status assoc :fresh? false)
+                                       (glfw post-empty-event)))
              (loop [frame-time 0] ; ──────────────────────────────── render loop
-               (if (glfw window-should-close window) ; NB also checked in event loop
+               (cond
+                 (glfw window-should-close window) ; NB also checked in event loop
                  (swap! status assoc
                    :stopped (glfw get-timer-value)
                    :close? true)
+
+                 (:fresh? @status)
                  (do
                    ;; TODO event handler which `bgfx_reset`s width and height
                    ;; and somehow gets it through to renderer
@@ -91,16 +103,28 @@
                          freq (glfw get-timer-frequency)
                          period-ms (/ 1000. freq)
                          time (case freq 0 0 (-> pre (- (:started @status)) (/ freq) float))]
-                     (try (@renderer setup status width height time (* frame-time period-ms))
+                     (try (renderer setup status width height time (* frame-time period-ms))
                           (bgfx frame false)
                           (catch Throwable t
                             (pprint t)
                             (println "Renderer error; retrying in 5s")
                             (Thread/sleep 5000)))
-                     (recur (- (glfw get-timer-value) pre))))))) ; full speed!
+                     (recur (- (glfw get-timer-value) pre)))) ; full speed!
+
+                 :else nil)))
            (catch Throwable t
              (swap! status assoc :startup-error (Throwable->map t))))))
      :status status})) ; could add-watch, or just close the window...
+
+(add-watch #'make-graphics-thread :refresh
+  (fn [k r o n] (println "Refreshing graphics thread") (@refresh-thread!)))
+(add-watch #'renderer/renderer :refresh
+  (fn [k r o n] (println "Refreshing graphics thread for renderer") (@refresh-thread!)))
+
+(comment
+  ;; TODO ideally not reset state i.e. just update renderer itself?
+  (remove-watch #'renderer/renderer :refresh)
+  )
 
 (defn join-graphics-thread [{:keys [thread]}]
   (println "Joining graphics thread") ; ...expecting it to die
@@ -108,57 +132,55 @@
        (catch InterruptedException e
          (.printStackTrace e))))
 
-(defonce retry-on-window-close? (atom true)) ; allows window to close without quitting repl and jvm
-
-(defn -main [& args]
+(defn -main [& args] ; ════════════════════════════════════════════════════ main
   (println "Startup")
   (let [width 1920 height 1200]
     (cc/with-resource
       [repl (start-repl 12345) stop-repl
        glfw-session (open-glfw-session) close-glfw-session]
-      (loop [] ; ────────────────────────────────────── retryable window opening
-        (when @retry-on-window-close?
-          (cc/with-resource [window (open-window width height) close-window]
-            (loop [{:keys [close?] :as status} nil] ; reloadable graphics thread
-              (when-not close?
-                (recur
-                  (cc/with-resource [graphics
-                                     (make-graphics-thread window width height)
-                                     join-graphics-thread]
-                    (let [{:keys [thread status]} graphics]
-                      (println "Starting graphics thread")
-                      (.start thread)
-                      (loop [{:keys [started startup-error]} @status] ; await renderer startup
-                        (glfw poll-events)
-                        (when-not (or started startup-error)
-                          (do (Thread/sleep 16)
-                              (recur @status))))
-                      (cond
-                        (:started @status)
-                        (do
-                          (println "Showing window")
-                          (glfw show-window window)
-                          (println "Event loop")
-                          (loop [{:keys [fresh?]} @status] ; ──────── event loop
-                            (cond
-                              ;; Exit event loop, close window, possibly retry
-                              (glfw window-should-close window) ; NB also checked in render loop
-                              (swap! status assoc :close? true)
+      (loop [] ; ──────────────────────────────────────────────────────── window
+        (cc/with-resource [window (open-window width height) close-window]
+          (loop [{:keys [close?] :as status} nil] ; ───────────────────── thread
+            (when-not close?
+              (recur
+                (cc/with-resource [graphics
+                                   (make-graphics-thread window width height)
+                                   join-graphics-thread]
+                  (let [{:keys [thread status]} graphics]
+                    (println "Starting graphics thread")
+                    (.start thread)
+                    (loop [{:keys [started startup-error]} @status] ; await renderer startup
+                      (glfw poll-events)
+                      (when-not (or started startup-error)
+                        (do (Thread/sleep 16)
+                            (recur @status))))
+                    
+                    (cond
+                      (:started @status)
+                      (do
+                        (println "Showing window")
+                        (glfw show-window window)
+                        (println "Event loop")
+                        (loop [{:keys [fresh?]} @status] ; ────────── event loop
+                          (cond
+                            ;; Exit event loop, close window, possibly retry
+                            (glfw window-should-close window) ; NB also checked in render loop
+                            (swap! status assoc :close? true)
 
-                              ;; Continue event loop, consume events even if renderer-error
-                              fresh?
-                              (do (glfw wait-events) ; not poll; graphics thread separate
-                                  (recur @status))
+                            ;; Continue event loop, consume events even if renderer-error
+                            fresh?
+                            (do (glfw wait-events) ; not poll; graphics thread separate
+                                (recur @status))
 
-                              ;; Exit event loop, keep window, restart graphics thread
-                              :else @status)))
+                            ;; Exit event loop, keep window, restart graphics thread
+                            :else @status)))
 
-                        (:startup-error @status)
-                        (do (pprint (:startup-error @status))
-                            (println "Graphics thread startup error; retrying in 5s")
-                            (Thread/sleep 5000)
-                            @status))))))))
-          (recur))))))
+                      (:startup-error @status)
+                      (do (pprint (:startup-error @status))
+                          (println "Graphics thread startup error; retrying in 5s")
+                          (Thread/sleep 5000)
+                          @status))))))))
+        (when @retry-on-window-close? (recur))))))
 
 (comment
   ;; Windows, from emacs: M-:

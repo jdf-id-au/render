@@ -41,7 +41,7 @@
     (bgfx dbg-text-printf 0 0 0x1f (str cols "x" lines))
     #_(bgfx dbg-text-image  x y 40 12 (logo/logo) pitch)))
 
-(defn make-vertex-layout [normals? colour? nUVs] ; ─────────────────────── setup
+(defn make-vertex-layout [normals? colour? nUVs] ; ═══════════════════════ setup
   (let [layout (BGFXVertexLayout/calloc)]
     (bgfx vertex-layout-begin layout (bgfx get-renderer-type))
     (bgfx vertex-layout-add layout
@@ -175,56 +175,52 @@
   (MemoryUtil/memFree vertices)
   (.free layout))
 
-(defonce renderer-fn* (atom nil)) ; ────────────────────────────────────── renderer
-(reset! renderer-fn* ; C-M-x this
-  ;; add-watch to normal defn is less suitable because of threading
-  (fn renderer [{:keys [view-buf proj-buf model-buf vbh ibh program]
-                 :as setup}
-                status
-                width height time frame-time]
-    (bgfx set-view-rect 0 0 0 width height)
-    (bgfx touch 0)
-    (bgfx dbg-text-printf 0 0 0x1f (str frame-time))
+(defn renderer ; ══════════════════════════════════════════════════════ renderer
+  [{:keys [view-buf proj-buf model-buf vbh ibh program] :as setup}
+   status width height time frame-time]
+  (bgfx set-view-rect 0 0 0 width height)
+  (bgfx touch 0)
+  (bgfx dbg-text-printf 0 0 0x1f (str frame-time))
 
-    (let [at (Vector3f. 0. 0. 0.)
-          eye (Vector3f. 0. (* 30 (Math/sin time)) -35. )
-          view (doto (Matrix4x3f.)
-                 (.setLookAtLH
-                   (.x eye) (.y eye) (.z eye)
-                   (.x at) (.y at) (.z at)
-                   0. 1. 0.))
-          
-          fov (* 60. #_(Math/sin time)) near 0.1 far 100.
-          fov-radians (-> fov (* Math/PI) (/ 180))
-          aspect (/ width (float height))
-          proj (doto (Matrix4f.)
-                 (.setPerspectiveLH fov-radians aspect near far
-                   (not (.homogeneousDepth (bgfx get-caps)))))
+  (let [at (Vector3f. 0. 0. 0.)
+        eye (Vector3f. 0. (* 30 (Math/sin time)) -35. )
+        view (doto (Matrix4x3f.)
+               (.setLookAtLH
+                 (.x eye) (.y eye) (.z eye)
+                 (.x at) (.y at) (.z at)
+                 0. 1. 0.))
+        
+        fov (* 60. #_(Math/sin time)) near 0.1 far 100.
+        fov-radians (-> fov (* Math/PI) (/ 180))
+        aspect (/ width (float height))
+        proj (doto (Matrix4f.)
+               (.setPerspectiveLH fov-radians aspect near far
+                 (not (.homogeneousDepth (bgfx get-caps)))))
 
-          _ (bgfx set-view-transform 0
-                  (.get4x4 view view-buf)
-                  (.get proj proj-buf))
+        _ (bgfx set-view-transform 0
+                (.get4x4 view view-buf)
+                (.get proj proj-buf))
 
-          encoder (bgfx encoder-begin false)
-          ]
-      (doseq [yy (range 12) xx (range 12)]
-        (bgfx encoder-set-transform encoder
-              (-> (Matrix4x3f.)
-                (.translation
-                  (-> xx (* 3.) (- 15))
-                  (-> yy (* 3.) (- 15))
-                  0.)
-                (.rotateXYZ
-                  (-> xx (* 0.21) (+ time))
-                  (-> yy (* 0.37) (+ time))
-                  0.)
-                (.get4x4 model-buf)))
-        (bgfx encoder-set-vertex-buffer encoder 0 vbh 0 8)
-        (bgfx encoder-set-index-buffer encoder ibh 0 36)
-        (bgfx encoder-set-state encoder (BGFX state-default) 0)
-        (bgfx encoder-submit encoder 0 program 0 0))
-      
-      (bgfx encoder-end encoder))))
+        encoder (bgfx encoder-begin false)
+        ]
+    (doseq [yy (range 12) xx (range 12)]
+      (bgfx encoder-set-transform encoder
+            (-> (Matrix4x3f.)
+              (.translation
+                (-> xx (* 3.) (- 15))
+                (-> yy (* 3.) (- 15))
+                0.)
+              (.rotateXYZ
+                (-> xx (* 0.21) (+ time))
+                (-> yy (* 0.37) (+ time))
+                0.)
+              (.get4x4 model-buf)))
+      (bgfx encoder-set-vertex-buffer encoder 0 vbh 0 8)
+      (bgfx encoder-set-index-buffer encoder ibh 0 36)
+      (bgfx encoder-set-state encoder (BGFX state-default) 0)
+      (bgfx encoder-submit encoder 0 program 0 0))
+    
+    (bgfx encoder-end encoder)))
 
 (defn make
   "Initialise BGFX and configure window. Return renderer-fn atom."
@@ -257,8 +253,12 @@
     (bgfx set-debug (BGFX debug-text))
     (bgfx set-view-clear 0 (bit-or (BGFX clear-color) (BGFX clear-depth))
       0x303030ff 1.0 0)
-    renderer-fn*))
+    renderer))
 
 (defn close [_]
   (println "Closing renderer")
   (bgfx shutdown))
+
+(comment
+  (@main/refresh-thread!)
+  )
