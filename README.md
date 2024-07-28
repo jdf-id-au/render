@@ -45,7 +45,6 @@ Read eval graphics loop! In the grand tradition of (but much less sophisticated 
 ## TODO
 
 - sane aspect ratio preservation
-- rebindable GLFW callbacks
 - orbit
 - picking
 - shader wrangling (BGFX shell tools...)

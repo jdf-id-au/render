@@ -19,7 +19,8 @@
     #_(bgfx dbg-text-image  x y 40 12 (logo/logo) pitch)))
 
 (def callbacks
-  {})
+  {:mouse/button-1 (fn [window action] (println "button-1" window action))
+   [:mouse/button-1 :mod/shift] (fn [window action] (println "shift-button-1"))})
 
 (def cube-vertices
   [[-1.  1.  1. 0xff000000] ;; Double Double Double Long
