@@ -1,7 +1,8 @@
 (ns example.cubes
   "Example project using jdf/render."
   (:require [render.renderer :as rr]
-            [render.util :as ru :refer [with-resource glfw GLFW bgfx BGFX]])
+            [render.util :as ru :refer [with-resource glfw GLFW bgfx BGFX]]
+            [render.shaders :as rs])
   (:import (org.lwjgl.system MemoryUtil)
            (org.joml Matrix4f Matrix4x3f Vector3f)))
 
@@ -30,7 +31,7 @@
    {:varying "
 vec4 v_color0    : COLOR0    = vec4(1.0, 0.0, 0.0, 1.0);
 vec3 a_position  : POSITION;
-vec4 a_color0    : COLOR0; "
+vec4 a_color0    : COLOR0;"
     :vertex "
 $input a_position, a_color0
 $output v_color0
@@ -45,6 +46,8 @@ void main()
 {
 	gl_FragColor = v_color0;
 }"}})
+
+(rs/compile (:cubes shaders))
 
 (def cube-vertices
   [[-1.  1.  1. 0xff000000] ;; Double Double Double Long
@@ -77,8 +80,9 @@ void main()
         vbh (rr/make-vertex-buffer vertices layout cube-vertices)
         indices (MemoryUtil/memAlloc (* 2 (count cube-indices)))
         ibh (rr/make-index-buffer indices cube-indices)
-        vs (rr/load-shader "vs_cubes")
-        fs (rr/load-shader "fs_cubes")
+        [vs fs] (->> shaders :cubes rs/compile ((juxt :vertex :fragment)) (map rr/load-shader))
+        ;; vs (rr/load-shader "vs_cubes")
+        ;; fs (rr/load-shader "fs_cubes")
         program (bgfx create-program vs fs true)
         view-buf (MemoryUtil/memAllocFloat 16)
         proj-buf (MemoryUtil/memAllocFloat 16)

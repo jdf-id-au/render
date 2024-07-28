@@ -76,16 +76,26 @@
     (reify BGFXReleaseFunctionCallbackI
       (invoke [this ptr user-data] (MemoryUtil/nmemFree ptr)))))
 
-(defn load-shader [s]
-  (let [code (load-resource
-               (str "shaders/"
-                 (condp = (bgfx get-renderer-type)
-                   ;; 9 vulkan...
-                   (BGFX renderer-type-direct3d11) "dx11/"
-                   (BGFX renderer-type-direct3d12) "dx11/"
-                   (BGFX renderer-type-opengl) "glsl/"
-                   (BGFX renderer-type-metal) "metal/") s ".bin"))]
-    (bgfx create-shader (bgfx make-ref-release code release-memory-cb 0)))) ; 0 is _userData void pointer aka long so not nil
+(defn load-shader [x]
+  (cond
+    (string? x)
+    (let [code (load-resource
+                 (str "shaders/"
+                   (condp = (bgfx get-renderer-type)
+                     ;; 9 vulkan...
+                     (BGFX renderer-type-direct3d11) "dx11/"
+                     (BGFX renderer-type-direct3d12) "dx11/"
+                     (BGFX renderer-type-opengl) "glsl/"
+                     (BGFX renderer-type-metal) "metal/") x ".bin"))]
+      ;; 0 is _userData void pointer aka long so not nil
+      (bgfx create-shader (bgfx make-ref-release code release-memory-cb 0)))
+
+    (bytes? x)
+    (let [res (MemoryUtil/memAlloc (count x))]
+      (println x)
+      (.put res x)
+      (.flip res)
+      (bgfx create-shader (bgfx make-ref-release res release-memory-cb 0)))))
 
 (defn load-texture [s]
   (let [data (load-resource (str "textures/" s))]

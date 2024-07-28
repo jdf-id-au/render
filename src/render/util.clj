@@ -1,5 +1,6 @@
 (ns render.util
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str])
+  (:import (java.io File)))
 
 (defmacro with-resource ; from jdf/comfort, to remove dependency
   "bindings => [name init deinit ...]
@@ -75,3 +76,7 @@
 
 (defn current-thread []
   (.getName (Thread/currentThread)))
+
+(defn temp-file [suffix]
+  (doto (File/createTempFile "render" suffix)
+    (.deleteOnExit)))

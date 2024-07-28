@@ -2,20 +2,67 @@
   "Build shaders; relies on host shell and version+platform matching binaries!
   e.g. https://www.lwjgl.org/browse/release/3.3.4/macosx/x64/bgfx-tools"
   ;; TODO lisp-curse-write shaders too? infer/learn/fake-until-make
-  )
+  (:require [render.util :as ru]
+            [clojure.string :as str]
+            [clojure.java.io :as io])
+  (:import (java.io StringWriter)
+           (java.nio.file Files))
+  (:refer-clojure :exclude [compile]))
 
-(defn compile [{:keys [varying vertex fragment]}]
-  ;; drop blank first line
-  ;; TODO insert contents of "bgfx_shader.sh" (after $input and $output lines?)
-  ;; TODO write to tmp files
-  
-  (str "shaderc -f " :fragment-tmp
-    " --varyingdef " :varying-tmp
-    " -o " :suitable-path ; or just tmp and load immediately!
-    " --type " :vertex-or-fragment
-    " --platform " :suitable
-    " --profile " :lookup
-  ))
+(defn add-include [code]
+  (let [w (StringWriter.)
+        [io-lines normal-lines] (->> code str/split-lines
+                                  (remove str/blank?)
+                                  (partition-by #(str/starts-with? % "$")))]
+    (doseq [group [io-lines
+                   ["#include \"bgfx_shader.sh\""]
+                   normal-lines]
+            line group]
+      (.write w line)
+      (.write w (int \newline)))
+    (.toString w)))
+
+(defn compile [{:keys [varying] :as code}]
+  (let [vdsc (ru/temp-file "varying.def.sc")
+        platform (condp #(str/starts-with? %2 %1) (System/getProperty "os.name")
+                   "Linux" "linux"
+                   "Mac" "osx"
+                   "Windows" "windows")
+        profile ({"linux" "440" ; GLSL (OpenGL)
+                  "osx" "metal" ; MSL (Metal)
+                  "windows" "s_5_0" ; HLSL (DirectX)
+                  } platform)]
+    (spit vdsc (str/trim varying))
+    ;; TODO could consider compiling and loading asynchronously...
+    (into {}
+      (for [shader [:vertex :fragment]
+            :let [in (ru/temp-file (name shader))
+                  plus-include (->> code shader add-include)
+                  _ (spit in plus-include)
+                  out (ru/temp-file (str (name shader) ".bin"))]]
+        (let [proc (.start (ProcessBuilder.
+                             ["shaderc"
+                              "-f" (.getCanonicalPath in)
+                              "-i" (->> "bgfx_shader.sh" io/resource io/file .getParent) 
+                              "--varyingdef" (.getCanonicalPath vdsc)
+                              "-o" (.getCanonicalPath out)
+                              "--type" (name shader)
+                              "--platform" platform
+                              "--profile" profile]))
+              exit-code (.waitFor proc)
+              stdout (slurp (.inputReader proc))
+              stderr (slurp (.errorReader proc))]
+          [shader
+           (case exit-code
+             0 (-> out .toPath Files/readAllBytes)
+             (throw (ex-info (str "shaderc failed with exit code " exit-code)
+                      {:exit-code exit-code
+                       :platform platform :profile profile
+                       :varying (-> vdsc slurp str/split-lines)
+                       :code (str/split-lines plus-include)
+                       :file (.getCanonicalPath in)
+                       :stdout (str/split-lines stdout)
+                       :stderr (str/split-lines stderr)})))])))))
 
 ;; Maybe don't do this yet ─────────────────────────────────────────────────────
 
