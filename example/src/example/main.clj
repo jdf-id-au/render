@@ -1,11 +1,14 @@
 (ns example.main
   "Example project using jdf/render."
-  (:require [example.renderer :as er]
+  (:require [example.cubes :as cubes]
             [render.core :as rc]
             ))
 
 (defn -main [& args]
-  (rc/main #'er/setup #'er/teardown #'er/renderer))
+  (rc/main
+    {:renderer [#'cubes/setup #'cubes/teardown #'cubes/renderer]
+     :window [1920 1200 "cubes"]
+     :callbacks #'cubes/callbacks}))
 
 (comment
   ;; Windows, from emacs: M-:

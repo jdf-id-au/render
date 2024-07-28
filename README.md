@@ -7,7 +7,8 @@ Read eval graphics loop! In the grand tradition of (but much less sophisticated 
 - https://github.com/cbaggers/cepl
 - https://github.com/byulparan/cl-visual
 - https://github.com/digego/extempore
-- https://www.shadertoy.com/ https://iquilezles.org/
+- https://www.shadertoy.com/
+- https://github.com/oakes/play-cljc
 
 ## Getting started
 
@@ -28,6 +29,19 @@ Read eval graphics loop! In the grand tradition of (but much less sophisticated 
 
 (untested, need vulkan shaders)
 
+## API
+
+- `render.core/main` function
+- `render.core/retry-on-window-close?` atom
+- `render.renderer/make-vertex-layout` function
+- `render.renderer/make-vertex-buffer` function
+- `render.renderer/make-index-buffer` function
+- `render.renderer/load-shader` function
+- `render.renderer/load-texture` function
+- `render.util/bgfx` and `BGFX` macros
+- `render.util/glfw` and `GLFW` macros
+- `render.util/with-resource` macro (copypaste from https://github.com/jdf-id-au/comfort )
+
 ## TODO
 
 - sane aspect ratio preservation
@@ -35,5 +49,5 @@ Read eval graphics loop! In the grand tradition of (but much less sophisticated 
 - orbit
 - picking
 - shader wrangling (BGFX shell tools...)
-- videos
+- save to video
 - ...

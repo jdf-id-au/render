@@ -22,22 +22,28 @@
     :else (throw (IllegalArgumentException.
                    "with-resource only allows Symbols in bindings"))))
 
+(defn kebab->pascal [s]
+  (let [segs (str/split (str s) #"-")]
+    (->> segs (map str/capitalize) (apply str))))
+
+(defn kebab->snake [s]
+  (str/replace s \- \_))
+
+(defn kebab->screaming-snake [s]
+  (-> s kebab->snake str/upper-case))
+
 (defmacro bgfx
   "Briefer function calls"
   {:clj-kondo/ignore [:unresolved-symbol]}
   [function-name & args]
-  (let [f# (symbol (str "org.lwjgl.bgfx.BGFX/bgfx_" (str/replace function-name \- \_)))]
+  (let [f# (symbol (str "org.lwjgl.bgfx.BGFX/bgfx_" (kebab->snake function-name)))]
     `(~f# ~@args)))
 
 (defmacro BGFX ; TODO consider reader literals?
   "Briefer enums"
   {:clj-kondo/ignore [:unresolved-symbol]}
   [enum-name]
-  (symbol (str "org.lwjgl.bgfx.BGFX/BGFX_" (-> enum-name (str/replace \- \_) str/upper-case))))
-
-(defn kebab->pascal [s]
-  (let [segs (str/split (str s) #"-")]
-    (->> segs (map str/capitalize) (apply str))))
+  (symbol (str "org.lwjgl.bgfx.BGFX/BGFX_" (kebab->screaming-snake enum-name))))
 
 (defmacro glfw
   "Briefer function calls"
@@ -50,7 +56,7 @@
   "Briefer enums" ; via `public static final long`?
   {:clj-kondo/ignore [:unresolved-symbol]}
   [enum-name]
-  (symbol (str "org.lwjgl.glfw.GLFW/GLFW_" (-> enum-name (str/replace  \- \_) str/upper-case))))
+  (symbol (str "org.lwjgl.glfw.GLFW/GLFW_" (kebab->screaming-snake enum-name))))
 
 #_(defn cast->byte
   "Cast u8 to i8 aka java byte.

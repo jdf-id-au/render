@@ -1,4 +1,4 @@
-(ns example.renderer
+(ns example.cubes
   "Example project using jdf/render."
   (:require [render.renderer :as rr]
             [render.util :as ru :refer [with-resource glfw GLFW bgfx BGFX]])
@@ -17,6 +17,9 @@
     ;; Coords in characters not pixels
     (bgfx dbg-text-printf 0 0 0x1f (str cols "x" lines))
     #_(bgfx dbg-text-image  x y 40 12 (logo/logo) pitch)))
+
+(def callbacks
+  {})
 
 (def cube-vertices
   [[-1.  1.  1. 0xff000000] ;; Double Double Double Long
