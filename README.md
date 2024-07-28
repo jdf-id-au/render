@@ -1,4 +1,4 @@
-# jdf/cljbg
+# jdf/render
 
 **BGFX** GPU graphics + **GLFW** &mdash; **Clojure** REPL
 
@@ -11,4 +11,5 @@ Hot reloading 3d REPLy goodness!
 - orbit
 - picking
 - shader wrangling (BGFX shell tools...)
+- videos
 - ...

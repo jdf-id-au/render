@@ -1,5 +1,26 @@
-(ns util
+(ns render.util
   (:require [clojure.string :as str]))
+
+(defmacro with-resource ; from jdf/comfort, to remove dependency
+  "bindings => [name init deinit ...]
+
+  Evaluates body in a try expression with names bound to the values
+  of the inits, and a finally clause that calls (deinit name) on
+  each name in reverse order."
+  {:clj-kondo/ignore [:unresolved-symbol]}
+  [bindings & body]
+  (assert (vector? bindings))
+  (assert (zero? (mod (count bindings) 3)))
+  (cond
+    (= (count bindings) 0) `(do ~@body)
+    (symbol? (bindings 0)) `(let ~(subvec bindings 0 2) 
+                              (try
+                                (with-resource ~(subvec bindings 3) ~@body)
+                                (finally
+                                  (when-let [deinit# ~(bindings 2)]
+                                    (deinit# ~(bindings 0))))))
+    :else (throw (IllegalArgumentException.
+                   "with-resource only allows Symbols in bindings"))))
 
 (defmacro bgfx
   "Briefer function calls"

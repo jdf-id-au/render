@@ -1,34 +1,11 @@
-(ns renderer
-  (:require [logo]
-            [util :refer [glfw GLFW bgfx BGFX]]
-            [clj-commons.primitive-math :as m]
-            [comfort.core :as cc]
-            [clojure.java.io :as io])
-  (:import (java.util Objects)
-           (java.util.function Consumer)
-           (java.nio.file Files)
-           (org.lwjgl.glfw Callbacks GLFWErrorCallback GLFWKeyCallbackI)
-           (org.lwjgl.bgfx BGFXInit
-             BGFXVertexLayout
-             BGFXReleaseFunctionCallback BGFXReleaseFunctionCallbackI)
-           (org.lwjgl BufferUtils)
-           (org.lwjgl.system Platform MemoryStack MemoryUtil)
-           (org.joml Matrix4f Matrix4x3f Vector3f)
-           (java.util.concurrent CountDownLatch TimeUnit)
-           (java.util.concurrent.atomic AtomicBoolean)))
+(ns example.renderer
+  "Example project using jdf/render."
+  (:require [render.renderer :as rr]
+            [render.util :as ru :refer [with-resource glfw GLFW bgfx BGFX]])
+  (:import (org.lwjgl.system MemoryUtil)
+           (org.joml Matrix4f Matrix4x3f Vector3f)))
 
-(defn display-scale
-  "Return window x-scale, y-scale, unscaled width and unscaled height."
-  [window]
-  (let [x (make-array Float/TYPE 1) ; could use FloatBuffer... any advantage?
-        y (make-array Float/TYPE 1)
-        w (make-array Integer/TYPE 1)
-        h (make-array Integer/TYPE 1)]
-    (glfw get-window-content-scale window x y) ; ratio between current dpi and platform's default dpi
-    (glfw get-window-size window w h) ; in screen coordinates
-    (mapv first [x y w h])))
-
-(defn debug-text
+#_(defn debug-text
   [cols lines]
   ;; cols and lines seem to be ORIGINAL dimensions ("resolution") / 8x16
   (bgfx dbg-text-clear 0 false)
@@ -40,78 +17,6 @@
     ;; Coords in characters not pixels
     (bgfx dbg-text-printf 0 0 0x1f (str cols "x" lines))
     #_(bgfx dbg-text-image  x y 40 12 (logo/logo) pitch)))
-
-(defn make-vertex-layout [normals? colour? nUVs] ; ═══════════════════════ setup
-  (let [layout (BGFXVertexLayout/calloc)]
-    (bgfx vertex-layout-begin layout (bgfx get-renderer-type))
-    (bgfx vertex-layout-add layout
-      (BGFX attrib-position) 3 (BGFX attrib-type-float) false false)
-    (when normals?
-      (bgfx vertex-layout-add layout
-        (BGFX attrib-normal) 3 (BGFX attrib-type-float) false false))
-    (when colour?
-      (bgfx vertex-layout-add layout
-        (BGFX attrib-color0) 4 (BGFX attrib-type-uint8) true false))
-    (when (pos? nUVs)
-      (bgfx vertex-layout-add layout
-        (BGFX attrib-texcoord0) 2 (BGFX attrib-type-float) false false))
-    (bgfx vertex-layout-end layout)
-    layout))
-
-(defn make-vertex-buffer
-  ([buffer layout]
-   (let [r (bgfx make-ref buffer)]
-     (bgfx create-vertex-buffer r layout (BGFX buffer-none))))
-  ([buffer layout vertices]
-   (doseq [vertex vertices
-           attr vertex]
-     #_(println "buffering" (type attr) attr)
-     (condp = (type attr)
-       Double (.putFloat buffer (unchecked-float attr)) ; `1.` literals are Double
-       Long (.putInt buffer (unchecked-int attr))
-       Float (.putFloat buffer attr)
-       Integer (.putInt buffer attr)))
-   (assert (zero? (.remaining buffer)))
-   (.flip buffer)
-   (make-vertex-buffer buffer layout)))
-
-(defn make-index-buffer [buffer indices]
-  (doseq [index indices] (.putShort buffer index))
-  (assert (zero? (.remaining buffer)))
-  (.flip buffer)
-  (bgfx create-index-buffer (bgfx make-ref buffer) (BGFX buffer-none)))
-
-(defn load-resource [path]
-  (let [r (-> path io/resource io/file)
-        ;; memAlloc (C malloc, "off heap") vs BufferUtils/createByteBuffer ?
-        res (MemoryUtil/memAlloc (Files/size (.toPath r)))]
-    (with-open [is (io/input-stream r)]
-      (loop [b (.read is)]
-        (when (not= b -1)
-          (.put res (m/ubyte->byte b))
-          (recur (.read is)))))
-    (.flip res)))
-
-(def release-memory-cb
-  (BGFXReleaseFunctionCallback/create
-    (reify BGFXReleaseFunctionCallbackI
-      (invoke [this ptr user-data] (MemoryUtil/nmemFree ptr)))))
-
-(defn load-shader [s]
-  (let [code (load-resource
-               (str "shaders/"
-                 (condp = (bgfx get-renderer-type)
-                   (BGFX renderer-type-direct3d11) "dx11/"
-                   (BGFX renderer-type-direct3d12) "dx11/"
-                   (BGFX renderer-type-opengl) "glsl/"
-                   (BGFX renderer-type-metal) "metal/") s ".bin"))]
-    (bgfx create-shader (bgfx make-ref-release code release-memory-cb 0)))) ; 0 is _userData void pointer aka long so not nil
-
-(defn load-texture [s]
-  (let [data (load-resource (str "textures/" s))]
-    (bgfx create-texture
-      (bgfx make-ref-release data release-memory-cb nil)
-      (BGFX texture-none) 0 nil)))
 
 (def cube-vertices
   [[-1.  1.  1. 0xff000000] ;; Double Double Double Long
@@ -138,14 +43,14 @@
    6 3 7])
 
 (defn setup []
-  (println "Setting up renderer on thread" (util/current-thread))
-  (let [layout (make-vertex-layout false true 0)
+  (println "Setting up renderer on thread" (ru/current-thread))
+  (let [layout (rr/make-vertex-layout false true 0)
         vertices (MemoryUtil/memAlloc (* 8 (+ (* 3 4) 4)))
-        vbh (make-vertex-buffer vertices layout cube-vertices)
+        vbh (rr/make-vertex-buffer vertices layout cube-vertices)
         indices (MemoryUtil/memAlloc (* 2 (count cube-indices)))
-        ibh (make-index-buffer indices cube-indices)
-        vs (load-shader "vs_cubes")
-        fs (load-shader "fs_cubes")
+        ibh (rr/make-index-buffer indices cube-indices)
+        vs (rr/load-shader "vs_cubes")
+        fs (rr/load-shader "fs_cubes")
         program (bgfx create-program vs fs true)
         view-buf (MemoryUtil/memAllocFloat 16)
         proj-buf (MemoryUtil/memAllocFloat 16)
@@ -175,18 +80,15 @@
   (MemoryUtil/memFree vertices)
   (.free layout))
 
-(defonce refresh! ; ═══════════════════════════════════════════════════ renderer
-  (atom (fn [] (throw (ex-info "No renderer refresher yet" {})))))
-
 (defn renderer
-  [{:keys [view-buf proj-buf model-buf vbh ibh program] :as setup}
+  [{:keys [view-buf proj-buf model-buf vbh ibh program] :as context}
    status width height time frame-time]
   (bgfx set-view-rect 0 0 0 width height)
   (bgfx touch 0)
   (bgfx dbg-text-printf 0 0 0x1f (str frame-time))
 
   (let [at (Vector3f. 0. 0. 0.)
-        eye (Vector3f. (* 10 (Math/tan time)) (* 30 (Math/sin time)) -35. )
+        eye (Vector3f. (* 10 #_(Math/tan time)) (* 30 (Math/sin time)) -35. )
         view (doto (Matrix4x3f.)
                (.setLookAtLH
                  (.x eye) (.y eye) (.z eye)
@@ -224,43 +126,6 @@
       (bgfx encoder-submit encoder 0 program 0 0))
     
     (bgfx encoder-end encoder)))
-
-(defn make
-  "Initialise BGFX and configure window. Return renderer-fn atom."
-  [window width height]
-  (println "Making renderer")
-  (cc/with-resource [stack (MemoryStack/stackPush) nil
-                     init (BGFXInit/malloc stack) nil]
-    (bgfx init-ctor init)
-    (.resolution init (reify Consumer ; does this mean it should detect change?
-                        (accept [this o]
-                          (.width o width)
-                          (.height o height)
-                          (.reset o (BGFX reset-vsync)))))
-    (println "Checking platform")
-    (condp = (Platform/get)
-      Platform/LINUX
-      (doto (.platformData init)
-        (.ndt (org.lwjgl.glfw.GLFWNativeX11/glfwGetX11Display))
-        (.nwh (org.lwjgl.glfw.GLFWNativeX11/glfwGetX11Window window)))
-      ;; TODO getWaylandDisplay
-      Platform/MACOSX
-      (doto (.platformData init)
-        (.nwh (org.lwjgl.glfw.GLFWNativeCocoa/glfwGetCocoaWindow window)))
-      Platform/WINDOWS
-      (doto (.platformData init)
-        (.nwh (org.lwjgl.glfw.GLFWNativeWin32/glfwGetWin32Window window))))
-    (println "Initialising bgfx")
-    (assert (bgfx init init))
-    (println "bgfx renderer:" (bgfx get-renderer-name (bgfx get-renderer-type)))
-    (bgfx set-debug (BGFX debug-text))
-    (bgfx set-view-clear 0 (bit-or (BGFX clear-color) (BGFX clear-depth))
-      0x303030ff 1.0 0)
-    renderer))
-
-(defn close [_]
-  (println "Closing renderer")
-  (bgfx shutdown))
 
 (comment
   (@main/refresh-thread!)
