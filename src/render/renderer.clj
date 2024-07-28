@@ -80,6 +80,7 @@
   (let [code (load-resource
                (str "shaders/"
                  (condp = (bgfx get-renderer-type)
+                   ;; 9 vulkan...
                    (BGFX renderer-type-direct3d11) "dx11/"
                    (BGFX renderer-type-direct3d12) "dx11/"
                    (BGFX renderer-type-opengl) "glsl/"
