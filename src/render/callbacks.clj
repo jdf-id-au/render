@@ -62,13 +62,13 @@
           (when-let [d (get-in defs [:mouse mods button])]
               (d window action)))))
     (when-let [scroll (:scroll defs)]
-      (glfw set-cursor-pos-callback window
-        (reify GLFWCursorPosCallbackI
+      (glfw set-scroll-callback window
+        (reify GLFWScrollCallbackI
           (invoke [this window xpos ypos]
             (scroll window xpos ypos)))))
     (when-let [cursor (:cursor defs)]
-      (glfw set-scroll-callback window
-        (reify GLFWScrollCallbackI
+      (glfw set-cursor-pos-callback window
+        (reify GLFWCursorPosCallbackI
           (invoke [this window xoffset yoffset]
             (cursor window xoffset yoffset))))))
   window)
