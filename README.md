@@ -50,3 +50,12 @@ Read eval graphics loop! In the grand tradition of (but much less sophisticated 
 - shader wrangling (BGFX shell tools...)
 - save to video
 - ...
+
+## Shaders
+
+Downloaded binaries at your own risk, or compile from bgfx source...
+
+- get cli binaries (...) from https://www.lwjgl.org/browse/release/3.3.4/macosx/x64/bgfx-tool etc (must match deps version)
+- put on path
+- `chmod u+x`
+- `xattr -dr com.apple.quarantine "shaderc"` etc

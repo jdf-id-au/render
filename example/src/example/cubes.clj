@@ -23,6 +23,29 @@
    [:mouse/button-1 :mod/shift] (fn [window action] (println "shift-button-1"))
    #_#_:scroll (fn [window x y] (println "scroll " x " " y))})
 
+(def shaders
+  ;; Copyright 2011-2024 Branimir Karadzic. Modified.
+  ;; License: https://github.com/bkaradzic/bgfx/blob/master/LICENSE
+  {:cubes
+   {:varying "
+vec4 v_color0    : COLOR0    = vec4(1.0, 0.0, 0.0, 1.0);
+vec3 a_position  : POSITION;
+vec4 a_color0    : COLOR0; "
+    :vertex "
+$input a_position, a_color0
+$output v_color0
+void main()
+{
+	gl_Position = mul(u_modelViewProj, vec4(a_position, 1.0) );
+	v_color0 = a_color0;
+}"
+    :fragment "
+$input v_color0
+void main()
+{
+	gl_FragColor = v_color0;
+}"}})
+
 (def cube-vertices
   [[-1.  1.  1. 0xff000000] ;; Double Double Double Long
    [ 1.  1.  1. 0xff0000ff]

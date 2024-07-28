@@ -25,7 +25,7 @@
     symbol eval))
 
 (defn group-bindings
-  "Reduce bindings into hierarchy of {:key-type {mods {key-enum action-fn}}}.
+  "Use to reduce bindings into hierarchy of {:key-type {mods {key-enum action-fn}}}.
   Disregards OS key mapping!"
   [acc [k action-fn]]
   (case k
