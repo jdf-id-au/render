@@ -69,7 +69,7 @@
              (recur acc r)
              (let [[create! _ deps] (context k)]
                (recur (assoc acc k
-                        (do #_(println "Creating" (name k)
+                        (do (println "Creating" (name k)
                               (if (seq deps) (str "which depends on " deps) ""))
                             (if (seq deps)
                               (create! acc)
@@ -82,9 +82,8 @@
                      #_(println "Destroying" (name k) target)
                      (try
                        (destroy! target)
-                       (catch Exception e ; invisible otherwise because thread!
+                       (catch Exception e ; invisible otherwise! because effectively within a (finally ...)?
                          (println "Failed to destroy" (name k) target e)))
-                     
                      (dissoc acc k))
                    acc))
          m (into (keys context) order)))]))

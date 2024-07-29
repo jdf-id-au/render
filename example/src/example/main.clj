@@ -1,11 +1,16 @@
 (ns example.main
   "Example project using jdf/render."
   (:require [example.cubes :as cubes]
+            [example.cube-picking :as picking]
             [render.core :as rc]
             ))
 
 (defn -main [& args]
   (rc/main
+    {:renderer [#'picking/context #'picking/renderer]
+     :window [1920 1200 "picking"]
+     :callbacks #'picking/callbacks})
+  #_(rc/main
     {:renderer [#'cubes/context #'cubes/renderer]
      :window [1920 1200 "cubes"]
      :callbacks #'cubes/callbacks}))

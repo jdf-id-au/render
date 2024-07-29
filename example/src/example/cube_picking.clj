@@ -13,7 +13,7 @@
    #_#_:scroll (fn [window x y] (println "scroll " x " " y))})
 
 (def common
-  {:variyng "
+  {:varying "
 vec4 v_color0 : COLOR0 = vec4(1.0, 0.0, 0.0, 1.0);
 vec3 a_position : POSITION;
 vec4 a_color0 : COLOR0;"
@@ -65,36 +65,54 @@ void main() {
    2 3 6
    6 3 7])
 
-(defn setup []
-  (println "Setting up renderer on thread" (ru/current-thread))
-  (let [layout (rr/make-vertex-layout false true 0)
-        vertices (MemoryUtil/memAlloc (* 8 (+ (* 3 4) 4)))
-        vbh (rr/make-vertex-buffer vertices layout cube-vertices)
-        indices (MemoryUtil/memAlloc (* 2 (count cube-indices)))
-        ibh (rr/make-index-buffer indices cube-indices)
-        {vs :vertex fs :fragment} (->> shaders :cubes rs/compile rr/load-shader)
-        shading-program (bgfx create-program vs fs true)
-        u-id (bgfx create-uniform "u_id" (BGFX uniform-type-vec4) 1)
-        ;; picking colour target
-        t-id (bgfx create-texture-2d 8 8 false 1 (BGFX texture-format-rgba8) 0
+(def context
+  "Map of resource -> [create-fn destroy-fn] or [create-fn destroy-fn deps]"
+  {:layout
+   [#(rr/make-vertex-layout false true 0)
+    #(.free %)]
+   :vertices
+   [#(MemoryUtil/memAlloc (* 8 (+ (* 3 4) 4)))
+    #(MemoryUtil/memFree %)]
+   :vbh
+   [#(rr/make-vertex-buffer (:vertices %) (:layout %) cube-vertices)
+    #(bgfx destroy-vertex-buffer %)
+    #{:vertices :layout}]
+   :indices
+   [#(MemoryUtil/memAlloc (* 2 (count cube-indices)))
+    #(MemoryUtil/memFree %)]
+   :ibh
+   [#(rr/make-index-buffer (:indices %) cube-indices)
+    #(bgfx destroy-index-buffer %)
+    #{:indices}]
+   :shader-program
+   [#(let [{:keys [vertex fragment]} (->> shaders :cubes rs/compile rr/load-shader)]
+       (bgfx create-program vertex fragment true)) ; third arg is destroyShaders
+    #(bgfx destroy-program %)]
+   :u-id
+   [#(bgfx create-uniform "u_id" (BGFX uniform-type-vec4) 1)
+    #(bgfx destroy-uniform %)]
+   :t-id ; picking colour target
+   [#(bgfx create-texture-2d 8 8 false 1 (BGFX texture-format-rgba8)
                (bit-or
                  (BGFX texture-rt)
                  (BGFX sampler-min-point)
                  (BGFX sampler-mag-point)
                  (BGFX sampler-mip-point)
                  (BGFX sampler-u-clamp)
-                 (BGFX sampler-v-clamp)))
-        ;; picking depth buffer
-        d-id (bgfx create-texture-2d 8 8 false 1 (BGFX texture-format-d32f) 0
+                 (BGFX sampler-v-clamp)) nil)
+    #(bgfx destroy-texture %)]
+   :d-id ; picking depth buffer
+   [#(bgfx create-texture-2d 8 8 false 1 (BGFX texture-format-d32f)
                (bit-or
                  (BGFX texture-rt)
                  (BGFX sampler-min-point)
                  (BGFX sampler-mag-point)
                  (BGFX sampler-mip-point)
                  (BGFX sampler-u-clamp)
-                 (BGFX sampler-v-clamp)))
-        ;; CPU picking blit texture
-        b-id (bgfx create-texture-2d 8 8 false 1 (BGFX texture-format-rgba8) 0
+                 (BGFX sampler-v-clamp)) nil)
+    #(bgfx destroy-texture %)]
+   :b-id ; CPU picking blit texture
+   [#(bgfx create-texture-2d 8 8 false 1 (BGFX texture-format-rgba8)
                (bit-or
                  (BGFX texture-blit-dst)
                  (BGFX texture-read-back)
@@ -102,51 +120,26 @@ void main() {
                  (BGFX sampler-mag-point)
                  (BGFX sampler-mip-point)
                  (BGFX sampler-u-clamp)
-                 (BGFX sampler-v-clamp)))
-        fb-id (bgfx create-frame-buffer-from-handles
-                (doto (ShortBuffer/allocate 2) (.put (shorts [t-id d-id]))) true)
-        {vs :vertex fs :fragment} (->> shaders :pick rs/compile rr/load-shader)
-        picking-program (bgfx create-program vs fs true)
-        view-buf (MemoryUtil/memAllocFloat 16)
-        proj-buf (MemoryUtil/memAllocFloat 16)
-        model-buf (MemoryUtil/memAllocFloat 16)]
-    {:layout layout
-     :vertices vertices
-     :vbh vbh ; vertex buffer handle presumably
-     :indices indices
-     :ibh ibh
-     :shading-program shading-program
-
-     :u-id u-id
-     :fb-id fb-id
-     :picking-program picking-program
-     
-     :view-buf view-buf
-     :proj-buf proj-buf
-     :model-buf model-buf}))
-
-(defn teardown [{:keys [view-buf proj-buf model-buf
-                        shading-program
-                        ibh indices vbh vertices layout
-                        picking-program
-                        u-id fb-id]}]
-  (println "Tearing down renderer")
-  (MemoryUtil/memFree view-buf)
-  (MemoryUtil/memFree proj-buf)
-  (MemoryUtil/memFree model-buf)
-
-  
-  (bgfx destroy-program picking-program)
-  (bgfx destroy-uniform u-id)
-  (bgfx destroy-frame-buffer fb-id)
-
-  (bgfx destroy-program shading-program)
-
-  (bgfx destroy-index-buffer ibh)
-  (MemoryUtil/memFree indices)
-  (bgfx destroy-vertex-buffer vbh)
-  (MemoryUtil/memFree vertices)
-  (.free layout))
+                 (BGFX sampler-v-clamp)) nil)
+    #(bgfx destroy-texture %)]
+   :fb-id
+   [#(bgfx create-frame-buffer-from-handles
+       (doto (ShortBuffer/allocate 2) (.put (short-array [(:t-id %) (:d-id %)]))) true)
+    #(bgfx destroy-frame-buffer %)
+    #{:t-id :d-id}]
+   :picking-program
+   [#(let [{:keys [vertex fragment]} (->> shaders :pick rs/compile rr/load-shader)]
+       (bgfx create-program vertex fragment true))
+    #(bgfx destroy-program %)]
+   :view-buf
+   [#(MemoryUtil/memAllocFloat 16)
+    #(MemoryUtil/memFree %)]
+   :proj-buf
+   [#(MemoryUtil/memAllocFloat 16)
+    #(MemoryUtil/memFree %)]
+   :model-buf
+   [#(MemoryUtil/memAllocFloat 16)
+    #(MemoryUtil/memFree %)]})
 
 (defn renderer
   [{:keys [view-buf proj-buf model-buf vbh ibh
