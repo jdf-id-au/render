@@ -33,6 +33,8 @@
 (defn kebab->screaming-snake [s]
   (-> s kebab->snake str/upper-case))
 
+;; TODO gen/import docs for repl use...
+
 (defmacro bgfx
   "Briefer function calls"
   {:clj-kondo/ignore [:unresolved-symbol]}

@@ -103,6 +103,11 @@
       (bgfx make-ref-release data release-memory-cb nil)
       (BGFX texture-none) 0 nil)))
 
+(defn supported?
+  "e.g. (supported? (BGFX caps-texture-blit))"
+  [cap]
+  (not (zero? (bit-and cap (.supported (bgfx get-caps))))))
+
 (defonce refresh! ; ═══════════════════════════════════════════════════ renderer
   (atom (fn [] (throw (ex-info "No renderer refresher yet" {})))))
 

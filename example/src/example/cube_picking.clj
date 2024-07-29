@@ -4,8 +4,7 @@
             [render.util :as ru :refer [with-resource glfw GLFW bgfx BGFX]]
             [render.shaders :as rs])
   (:import (org.lwjgl.system MemoryUtil)
-           (org.joml Matrix4f Matrix4x3f Vector3f)
-           (java.nio ShortBuffer)))
+           (org.joml Matrix4f Matrix4x3f Vector3f)))
 
 (def callbacks
   {:mouse/button-1 (fn [window action] (println "button-1" window action))
@@ -65,6 +64,14 @@ void main() {
    2 3 6
    6 3 7])
 
+(def render-pass
+  "bgfx_view_id_t"
+  {:shading 0
+   :id 1
+   :blit 2})
+
+(def id-dim 8)
+
 (def context
   "Map of resource -> [create-fn destroy-fn] or [create-fn destroy-fn deps]"
   {:layout
@@ -92,7 +99,7 @@ void main() {
    [#(bgfx create-uniform "u_id" (BGFX uniform-type-vec4) 1)
     #(bgfx destroy-uniform %)]
    :t-id ; picking colour target
-   [#(bgfx create-texture-2d 8 8 false 1 (BGFX texture-format-rgba8)
+   [#(bgfx create-texture-2d id-dim id-dim false 1 (BGFX texture-format-rgba8)
                (bit-or
                  (BGFX texture-rt)
                  (BGFX sampler-min-point)
@@ -102,7 +109,7 @@ void main() {
                  (BGFX sampler-v-clamp)) nil)
     #(bgfx destroy-texture %)]
    :d-id ; picking depth buffer
-   [#(bgfx create-texture-2d 8 8 false 1 (BGFX texture-format-d32f)
+   [#(bgfx create-texture-2d id-dim id-dim false 1 (BGFX texture-format-d32f)
                (bit-or
                  (BGFX texture-rt)
                  (BGFX sampler-min-point)
@@ -112,7 +119,7 @@ void main() {
                  (BGFX sampler-v-clamp)) nil)
     #(bgfx destroy-texture %)]
    :b-id ; CPU picking blit texture
-   [#(bgfx create-texture-2d 8 8 false 1 (BGFX texture-format-rgba8)
+   [#(bgfx create-texture-2d id-dim id-dim false 1 (BGFX texture-format-rgba8)
                (bit-or
                  (BGFX texture-blit-dst)
                  (BGFX texture-read-back)
@@ -130,26 +137,23 @@ void main() {
     #{:t-id :d-id}]
    :picking-program
    [#(let [{:keys [vertex fragment]} (->> shaders :pick rs/compile rr/load-shader)]
+       (when-not (rr/supported? (BGFX caps-texture-blit))
+         (throw (ex-info "texture blit not supported" {:supported (.supported (bgfx get-caps))})))
        (bgfx create-program vertex fragment true))
     #(bgfx destroy-program %)]
-   :view-buf
-   [#(MemoryUtil/memAllocFloat 16)
-    #(MemoryUtil/memFree %)]
-   :proj-buf
-   [#(MemoryUtil/memAllocFloat 16)
-    #(MemoryUtil/memFree %)]
-   :model-buf
-   [#(MemoryUtil/memAllocFloat 16)
-    #(MemoryUtil/memFree %)]})
+   :view-buf [#(MemoryUtil/memAllocFloat 16) #(MemoryUtil/memFree %)]
+   :proj-buf [#(MemoryUtil/memAllocFloat 16) #(MemoryUtil/memFree %)]
+   :inv-proj-buf [#(MemoryUtil/memAllocFloat 16) #(MemoryUtil/memFree %)]
+   :model-buf [#(MemoryUtil/memAllocFloat 16) #(MemoryUtil/memFree %)]})
 
 (defn renderer
-  [{:keys [view-buf proj-buf model-buf vbh ibh
+  [{:keys [view-buf proj-buf inv-proj-buf cur-x cur-y
+           model-buf vbh ibh
            shading-program] :as context}
-   status width height time frame-time]
-  (bgfx set-view-rect 0 0 0 width height)
-  (bgfx touch 0)
-  (bgfx dbg-text-printf 0 0 0x1f (str frame-time))
-
+   {:keys [window] :as status} width height time frame-time]
+  #_(bgfx touch (:shading render-pass))
+  #_(bgfx dbg-text-printf 0 0 0x1f (str (format "%.2f" frame-time)))
+  
   (let [at (Vector3f. 0. 0. 0.)
         eye (Vector3f. (* 10 #_(Math/tan time)) (* 30 (Math/sin time)) -35. )
         view (doto (Matrix4x3f.)
@@ -165,12 +169,25 @@ void main() {
                (.setPerspectiveLH fov-radians aspect near far
                  (not (.homogeneousDepth (bgfx get-caps)))))
 
-        _ (bgfx set-view-transform 0
+        cur-x (double-array 1) cur-y (double-array 1)
+        win-w (int-array 1) win-h (int-array 1)
+        view-inv (.invert view (Matrix4x3f.))
+
+        encoder (bgfx encoder-begin false)]
+
+    ;; TODO explore bgfx window/fb size concepts
+    (glfw get-cursor-pos window cur-x cur-y)
+    (glfw get-window-size window win-w win-h)
+    (doseq [[i s] (map-indexed vector [(format "x=%.2f" (get cur-x 0))
+                                       (format "y=%.2f" (get cur-y 0))
+                                       (format "w=%d" (get win-w 0))
+                                       (format "h=%d" (get win-h 0))])]
+      (bgfx dbg-text-printf 0 i 0x1f s))
+    
+    (bgfx set-view-rect (:shading render-pass) 0 0 width height)
+    (bgfx set-view-transform (:shading render-pass)
                 (.get4x4 view view-buf)
                 (.get proj proj-buf))
-
-        encoder (bgfx encoder-begin false)
-        ]
     (doseq [yy (range 12) xx (range 12)]
       (bgfx encoder-set-transform encoder
             (-> (Matrix4x3f.)
@@ -186,7 +203,7 @@ void main() {
       (bgfx encoder-set-vertex-buffer encoder 0 vbh 0 8)
       (bgfx encoder-set-index-buffer encoder ibh 0 36)
       (bgfx encoder-set-state encoder (BGFX state-default) 0)
-      (bgfx encoder-submit encoder 0 shading-program 0 0))
+      (bgfx encoder-submit encoder (:shading render-pass) shading-program 0 0))
     
     (bgfx encoder-end encoder)))
 

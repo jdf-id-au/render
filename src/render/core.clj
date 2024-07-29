@@ -69,7 +69,7 @@
              (recur acc r)
              (let [[create! _ deps] (context k)]
                (recur (assoc acc k
-                        (do (println "Creating" (name k)
+                        (do #_(println "Creating" (name k)
                               (if (seq deps) (str "which depends on " deps) ""))
                             (if (seq deps)
                               (create! acc)
@@ -97,7 +97,7 @@
   (add-watch renderer-var :refresh
     (fn [k r o n] (println "Refreshing renderer")
       (@rr/refresh!)))
-  (let [status (atom nil)]
+  (let [status (atom {:window window})]
     {:thread
      (Thread.
        (fn []
@@ -132,7 +132,7 @@
                            period-ms (/ 1000. freq)
                            time (case freq 0 0 (-> pre (- (:started @status)) (/ freq) float))
                            renderer (-> status deref :renderer-var var-get)]
-                       (try (renderer context status
+                       (try (renderer context @status
                               width height time (* frame-time period-ms))
                             (bgfx frame false)
                             (catch Throwable t
@@ -144,7 +144,7 @@
                    :else nil))))
            (catch Throwable t
              (swap! status assoc :startup-error (Throwable->map t))))
-         (println "Graphics thread stopping properly")))
+         #_(println "Graphics thread stopping properly")))
      :status status})) ; could add-watch, or just close the window...
 
 (defn join-graphics-thread [{:keys [thread]}]
