@@ -81,7 +81,9 @@ void main() {
   {:layout
    [#(rr/make-vertex-layout false true 0)
     #(.free %)]
-   :vertices
+   :vertices ; use MemoryUtil when need SomethingBuffer...
+   ;; This doesn't crash but also doesn't work.
+   #_[#(java.nio.ByteBuffer/allocateDirect (* 8 (+ (*  3 4) 4)))]
    [#(MemoryUtil/memAlloc (* 8 (+ (* 3 4) 4)))
     #(MemoryUtil/memFree %)]
    :vbh
@@ -144,15 +146,10 @@ void main() {
        (when-not (rr/supported? (BGFX caps-texture-blit))
          (throw (ex-info "texture blit not supported" {:supported (.supported (bgfx get-caps))})))
        (bgfx create-program vertex fragment true))
-    #(bgfx destroy-program %)]
-   :view-buf [#(MemoryUtil/memAllocFloat 16) #(MemoryUtil/memFree %)]
-   :proj-buf [#(MemoryUtil/memAllocFloat 16) #(MemoryUtil/memFree %)]
-   :inv-proj-buf [#(MemoryUtil/memAllocFloat 16) #(MemoryUtil/memFree %)]
-   :model-buf [#(MemoryUtil/memAllocFloat 16) #(MemoryUtil/memFree %)]})
+    #(bgfx destroy-program %)]})
 
 (defn renderer
-  [{:keys [view-buf proj-buf inv-proj-buf cur-x cur-y
-           model-buf vbh ibh
+  [{:keys [ vbh ibh
            shading-program] :as context}
    {:keys [window] :as status} width height time frame-time]
   #_(bgfx touch (:shading render-pass))
@@ -174,6 +171,12 @@ void main() {
                  (not (.homogeneousDepth (bgfx get-caps)))))
 
         ;; potentially stack-allocated subject to jvm escape analysis?
+        ;; not guaranteed not to be moved?? risk invalidating glfw's "pointer"?
+        ;; revert to MemoryUtil and explicit frees if crashy
+        view-buf (float-array 16)
+        proj-buf (float-array 16)
+        inv-proj-buf (float-array 16)
+        model-buf (float-array 16)
         cur-x (double-array 1) cur-y (double-array 1)
         win-w (int-array 1) win-h (int-array 1)
         view-inv (.invert view (Matrix4x3f.))

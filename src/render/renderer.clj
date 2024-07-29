@@ -1,6 +1,5 @@
 (ns render.renderer
   (:require [render.util :as ru :refer [with-resource glfw GLFW bgfx BGFX]]
-            [clj-commons.primitive-math :as m]
             [clojure.java.io :as io])
   (:import (java.util.function Consumer)
            (java.nio.file Files)
@@ -12,10 +11,10 @@
 (defn display-scale
   "Return window x-scale, y-scale, unscaled width and unscaled height."
   [window]
-  (let [x (make-array Float/TYPE 1) ; could use FloatBuffer... any advantage?
-        y (make-array Float/TYPE 1)
-        w (make-array Integer/TYPE 1)
-        h (make-array Integer/TYPE 1)]
+  (let [x (float-array 1)
+        y (float-array 1)
+        w (int-array 1)
+        h (int-array 1)]
     (glfw get-window-content-scale window x y) ; ratio between current dpi and platform's default dpi
     (glfw get-window-size window w h) ; in screen coordinates
     (mapv first [x y w h])))
@@ -69,7 +68,7 @@
     (with-open [is (io/input-stream r)]
       (loop [b (.read is)]
         (when (not= b -1)
-          (.put res (m/ubyte->byte b))
+          (.put res (unchecked-byte b))
           (recur (.read is)))))
     (.flip res)))
 
@@ -122,8 +121,9 @@
              (recur acc r)
              (let [[create! _ deps] (context k)]
                (recur (assoc acc k
-                        (do #_(println "Creating" (name k)
-                              (if (seq deps) (str "which depends on " deps) ""))
+                        (do (println "Creating" (name k)
+                              (if (seq deps) (str "which depends on " deps) "")
+                              "with" create!)
                             (if (seq deps)
                               (create! acc)
                               (create!)))) r)))
@@ -132,11 +132,12 @@
        (reduce (fn [acc k]
                  (if-let [target (acc k)]
                    (let [[_ destroy! _] (context k)]
-                     #_(println "Destroying" (name k) target)
-                     (try
-                       (destroy! target)
-                       (catch Exception e ; invisible otherwise! because effectively within a (finally ...)?
-                         (println "Failed to destroy" (name k) target e)))
+                     (when destroy!
+                       (println "Destroying" (name k) target "with" destroy!)
+                       (try
+                         (destroy! target)
+                         (catch Exception e ; invisible otherwise! because effectively within a (finally ...)?
+                           (println "Failed to destroy" (name k) target e))))
                      (dissoc acc k))
                    acc))
          m (into (keys context) order)))]))
