@@ -79,21 +79,23 @@
       (invoke [this ptr user-data] (MemoryUtil/nmemFree ptr)))))
 
 (defn load-shader [x]
-  (let [bin
-        (cond (string? x)
-              (load-resource
-                 (str "shaders/"
-                   (condp = (bgfx get-renderer-type)
-                     ;; 9 vulkan...
-                     (BGFX renderer-type-direct3d11) "dx11/"
-                     (BGFX renderer-type-direct3d12) "dx11/"
-                     (BGFX renderer-type-opengl) "glsl/"
-                     (BGFX renderer-type-metal) "metal/") x ".bin"))
+  (if (map? x)
+    (into {} (for [[k v] x] [k (load-shader v)]))
+    (let [bin
+          (cond (string? x)
+                (load-resource
+                  (str "shaders/"
+                    (condp = (bgfx get-renderer-type)
+                      ;; 9 vulkan...
+                      (BGFX renderer-type-direct3d11) "dx11/"
+                      (BGFX renderer-type-direct3d12) "dx11/"
+                      (BGFX renderer-type-opengl) "glsl/"
+                      (BGFX renderer-type-metal) "metal/") x ".bin"))
 
-              (bytes? x)
-              (doto (MemoryUtil/memAlloc (count x)) (.put x) .flip))]
-    ;; 0 is _userData void pointer aka long so not nil
-    (bgfx create-shader (bgfx make-ref-release bin release-memory-cb 0))))
+                (bytes? x)
+                (doto (MemoryUtil/memAlloc (count x)) (.put x) .flip))]
+      ;; 0 is _userData void pointer aka long so not nil
+      (bgfx create-shader (bgfx make-ref-release bin release-memory-cb 0)))))
 
 (defn load-texture [s]
   (let [data (load-resource (str "textures/" s))]

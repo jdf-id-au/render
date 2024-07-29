@@ -22,7 +22,10 @@
       (.write w (int \newline)))
     (.toString w)))
 
-(defn compile [{:keys [varying] :as code}]
+(defn compile
+  "Compile supplied shaders using `shaderc` on OS command line."
+  [{:keys [varying] :as code}]
+  {:pre [varying (some code #{:vertex :fragment :compute})]}
   (let [vdsc (ru/temp-file "varying.def.sc")
         platform (condp #(str/starts-with? %2 %1) (System/getProperty "os.name")
                    "Linux" "linux"
