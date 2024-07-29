@@ -35,7 +35,8 @@
     (spit vdsc (str/trim varying))
     ;; TODO could consider compiling and loading asynchronously...
     (into {}
-      (for [shader [:vertex :fragment]
+      (for [shader #{:vertex :fragment :compute}
+            :when (shader code)
             :let [in (ru/temp-file (name shader))
                   plus-include (->> code shader add-include)
                   _ (spit in plus-include)
@@ -58,7 +59,6 @@
              (throw (ex-info (str "shaderc failed with exit code " exit-code)
                       {:exit-code exit-code
                        :platform platform :profile profile
-                       :varying (-> vdsc slurp str/split-lines)
                        :code (str/split-lines plus-include)
                        :file (.getCanonicalPath in)
                        :stdout (str/split-lines stdout)
@@ -106,6 +106,3 @@
     [ty
      (when (seq defaults) 
        (str " = " ty \( (->> defaults (map float) (interpose ", ") (apply str)) \)))]))
-
-
-
