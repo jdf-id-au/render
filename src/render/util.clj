@@ -80,3 +80,64 @@
 (defn temp-file [suffix]
   (doto (File/createTempFile "render" suffix)
     (.deleteOnExit)))
+
+;; ──────────────────────────────────────────────────────── DAG from jdf/comfort
+;; for reference https://groups.google.com/g/clojure/c/h1m6Qjuh3wA/m/pRqNY5HlYJEJ
+
+(defn add-node-id
+  [graph id]
+  (if (graph id)
+    graph
+    (assoc graph id {:next #{} :prev #{}})))
+
+(defn add-edge
+  [graph from-id to-id]
+  (-> graph
+    (add-node-id from-id)
+    (add-node-id to-id)
+    (update-in [from-id :next] conj to-id)
+    (update-in [to-id :prev] conj from-id)))
+
+(defn graph
+  "Use to reduce colls of nodes into map of {node-id {:prev #{node-id} :next #{node-id}}}.
+   from-id = to-id only add node-id, not an edge.
+   edge-fn needs to return [from-id to-id]"
+  [graph [from-id to-id :as node]]
+  (if (and from-id to-id)
+    (if (= from-id to-id) ; strictly this is a cycle, but is elided
+      (add-node-id graph from-id)
+      (add-edge graph from-id to-id))
+    (do
+      (println "Skipped node (need both from-id and to-id):" node)
+      graph)))
+
+(defn dag-impl
+  "Cycle at root will return empty map." ; FIXME?
+  ([graph] (into {} (for [[node-id {:keys [prev]}] graph
+                          :when (empty? prev)]
+                      [node-id (dag-impl node-id graph '())])))
+  ([node-id graph path]
+   (let [seen (set path)
+         proposed (conj path node-id)]
+     (if (seen node-id)
+       (throw (ex-info "cycle detected" {:node-id node-id :path path}))
+       (some->> (for [child (get-in graph [node-id :next])]
+                 [child (dag-impl child graph proposed)])
+         seq (into {}))))))
+
+(defn dag [nodes]
+  (->> nodes (reduce graph {}) dag-impl))
+
+(defn deps-order
+  "List ids from nodes of [from-id to-id] such that no id depends
+  on one which appears later in list."
+  [nodes]
+  (let [dag (dag nodes)
+        queue (loop [[k & r :as queue] nil
+                     [[dk dv] & dr :as deps] dag]
+                (if dv
+                  (recur (conj queue dk) (concat dv dr))
+                  (if dk
+                    (recur (conj queue dk) dr)
+                    queue)))]
+    (distinct queue)))

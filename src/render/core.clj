@@ -59,11 +59,41 @@
   ;; TODO could eventually track multiple threads/windows...
   (atom (fn [] (throw (ex-info "No thread refresher yet" {})))))
 
+(defn make-setup [context]
+  (let [order (ru/deps-order (for [[k [_ _ deps]] context, d deps] [k d]))]
+    [(fn setup []
+       (loop [acc {}
+              [k & r] (into (keys context) (reverse order))]
+         (if k
+           (if (acc k)
+             (recur acc r)
+             (let [[create! _ deps] (context k)]
+               (recur (assoc acc k
+                        (do #_(println "Creating" (name k)
+                              (if (seq deps) (str "which depends on " deps) ""))
+                            (if (seq deps)
+                              (create! acc)
+                              (create!)))) r)))
+           acc)))
+     (fn teardown [m]
+       (reduce (fn [acc k]
+                 (if-let [target (acc k)]
+                   (let [[_ destroy! _] (context k)]
+                     #_(println "Destroying" (name k) target)
+                     (try
+                       (destroy! target)
+                       (catch Exception e ; invisible otherwise because thread!
+                         (println "Failed to destroy" (name k) target e)))
+                     
+                     (dissoc acc k))
+                   acc))
+         m (into (keys context) order)))]))
+
 (defn make-graphics-thread [window width height
-                            setup-var teardown-var renderer-var]
+                            context-var renderer-var]
   (println "🎨 Making graphics thread from" (ru/current-thread))
-  (add-watch setup-var :refresh
-    (fn [k r o n] (println "Refreshing graphics thread for renderer setup")
+  (add-watch context-var :refresh
+    (fn [k r o n] (println "Refreshing graphics thread for renderer context")
       (@refresh-thread!)))
   (add-watch renderer-var :refresh
     (fn [k r o n] (println "Refreshing renderer")
@@ -73,47 +103,49 @@
      (Thread.
        (fn []
          (println "Graphics thread running on" (ru/current-thread))
-         (try 
-           (with-resource [session
-                           (rr/open-bgfx-session window width height)
-                           rr/close-bgfx-session
-                           
-                           context ((var-get setup-var)) (var-get teardown-var)]
-             (swap! status assoc
-               :renderer-var renderer-var
-               :started (glfw get-timer-value))
-             (reset! refresh-thread!
-               (fn [] (swap! status dissoc :renderer-var) (glfw post-empty-event)))
-             (reset! rr/refresh!
-               (fn [] (swap! status assoc :renderer-var renderer-var)))
-             (loop [frame-time 0] ; ──────────────────────────────── render loop
-               (cond
-                 (glfw window-should-close window) ; NB also checked in event loop
-                 (swap! status assoc
-                   :stopped (glfw get-timer-value)
-                   :close? true)
+         (try
+           (let [[setup-fn teardown-fn] (make-setup (var-get context-var))]
+             (with-resource [session
+                             (rr/open-bgfx-session window width height)
+                             rr/close-bgfx-session
+                             
+                             context (setup-fn) teardown-fn]
+               (swap! status assoc
+                 :renderer-var renderer-var
+                 :started (glfw get-timer-value))
+               (reset! refresh-thread!
+                 (fn [] (swap! status dissoc :renderer-var) (glfw post-empty-event)))
+               (reset! rr/refresh!
+                 (fn [] (swap! status assoc :renderer-var renderer-var)))
+               (loop [frame-time 0] ; ──────────────────────────────── render loop
+                 (cond
+                   (glfw window-should-close window) ; NB also checked in event loop
+                   (swap! status assoc
+                     :stopped (glfw get-timer-value)
+                     :close? true)
 
-                 (:renderer-var @status)
-                 (do
-                   ;; TODO event handler which `bgfx_reset`s width and height
-                   ;; and somehow gets it through to renderer
-                   (let [pre (glfw get-timer-value)
-                         freq (glfw get-timer-frequency)
-                         period-ms (/ 1000. freq)
-                         time (case freq 0 0 (-> pre (- (:started @status)) (/ freq) float))
-                         renderer (-> status deref :renderer-var var-get)]
-                     (try (renderer context status
-                           width height time (* frame-time period-ms))
-                          (bgfx frame false)
-                          (catch Throwable t
-                            (pprint t)
-                            (println "Renderer error; retrying in 5s")
-                            (Thread/sleep 5000)))
-                     (recur (- (glfw get-timer-value) pre)))) ; full speed!
+                   (:renderer-var @status)
+                   (do
+                     ;; TODO event handler which `bgfx_reset`s width and height
+                     ;; and somehow gets it through to renderer
+                     (let [pre (glfw get-timer-value)
+                           freq (glfw get-timer-frequency)
+                           period-ms (/ 1000. freq)
+                           time (case freq 0 0 (-> pre (- (:started @status)) (/ freq) float))
+                           renderer (-> status deref :renderer-var var-get)]
+                       (try (renderer context status
+                              width height time (* frame-time period-ms))
+                            (bgfx frame false)
+                            (catch Throwable t
+                              (pprint t)
+                              (println "Renderer error; retrying in 5s")
+                              (Thread/sleep 5000)))
+                       (recur (- (glfw get-timer-value) pre)))) ; full speed!
 
-                 :else nil)))
+                   :else nil))))
            (catch Throwable t
-             (swap! status assoc :startup-error (Throwable->map t))))))
+             (swap! status assoc :startup-error (Throwable->map t))))
+         (println "Graphics thread stopping properly")))
      :status status})) ; could add-watch, or just close the window...
 
 (defn join-graphics-thread [{:keys [thread]}]
@@ -122,7 +154,7 @@
        (catch InterruptedException e
          (.printStackTrace e))))
 
-(defn main [{[setup-var teardown-var renderer-var] :renderer ; ════════════ main
+(defn main [{[context-var renderer-var] :renderer ; ═══════════════════════ main
              [width height title] :window
              callbacks-var :callbacks}
             & args]
@@ -141,7 +173,7 @@
 
                               graphics
                               (make-graphics-thread window width height
-                                setup-var teardown-var renderer-var)
+                                context-var renderer-var)
                               join-graphics-thread]
                 (let [{:keys [thread status]} graphics]
                   (println "Starting graphics thread")

@@ -6,7 +6,7 @@
 
 (defn -main [& args]
   (rc/main
-    {:renderer [#'cubes/setup #'cubes/teardown #'cubes/renderer]
+    {:renderer [#'cubes/context #'cubes/renderer]
      :window [1920 1200 "cubes"]
      :callbacks #'cubes/callbacks}))
 

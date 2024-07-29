@@ -43,8 +43,7 @@
 (defn setup [window callbacks-var]
   (let [defs (reduce group-bindings {}
                (merge defaults (var-get callbacks-var)))]
-    (println "Callbacks:")
-    (pprint defs)
+    #_(pprint defs)
     ;; TODO GLFWCharCallbackI ...as well?
     (glfw set-key-callback window
       (reify GLFWKeyCallbackI

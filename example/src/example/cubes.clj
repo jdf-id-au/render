@@ -73,42 +73,38 @@ void main()
    2 3 6
    6 3 7])
 
-(defn setup []
-  (println "Setting up renderer on thread" (ru/current-thread))
-  (let [layout (rr/make-vertex-layout false true 0)
-        vertices (MemoryUtil/memAlloc (* 8 (+ (* 3 4) 4)))
-        vbh (rr/make-vertex-buffer vertices layout cube-vertices)
-        indices (MemoryUtil/memAlloc (* 2 (count cube-indices)))
-        ibh (rr/make-index-buffer indices cube-indices)
-        {vs :vertex fs :fragment} (->> shaders :cubes rs/compile rr/load-shader)
-        program (bgfx create-program vs fs true)
-        view-buf (MemoryUtil/memAllocFloat 16)
-        proj-buf (MemoryUtil/memAllocFloat 16)
-        model-buf (MemoryUtil/memAllocFloat 16)]
-    {:layout layout
-     :vertices vertices
-     :vbh vbh ; vertex buffer handle presumably
-     :indices indices
-     :ibh ibh
-     :vs vs
-     :fs fs
-     :program program
-     :view-buf view-buf
-     :proj-buf proj-buf
-     :model-buf model-buf}))
-
-(defn teardown [{:keys [view-buf proj-buf model-buf
-                        program ibh indices vbh vertices layout]}]
-  (println "Tearing down renderer")
-  (MemoryUtil/memFree view-buf)
-  (MemoryUtil/memFree proj-buf)
-  (MemoryUtil/memFree model-buf)
-  (bgfx destroy-program program)
-  (bgfx destroy-index-buffer ibh)
-  (MemoryUtil/memFree indices)
-  (bgfx destroy-vertex-buffer vbh)
-  (MemoryUtil/memFree vertices)
-  (.free layout))
+(def context
+  "Map of resource -> [create-fn destroy-fn] or [create-fn destroy-fn deps]"
+  {:layout
+   [#(rr/make-vertex-layout false true 0)
+    #(.free %)]
+   :vertices
+   [#(MemoryUtil/memAlloc (* 8 (+ (* 3 4) 4)))
+    #(MemoryUtil/memFree %)]
+   :vbh
+   [#(rr/make-vertex-buffer (:vertices %) (:layout %) cube-vertices)
+    #(bgfx destroy-vertex-buffer %)
+    #{:vertices :layout}]
+   :indices
+   [#(MemoryUtil/memAlloc (* 2 (count cube-indices)))
+    #(MemoryUtil/memFree %)]
+   :ibh
+   [#(rr/make-index-buffer (:indices %) cube-indices)
+    #(bgfx destroy-index-buffer %)
+    #{:indices}]
+   :program
+   [#(let [{:keys [vertex fragment]} (->> shaders :cubes rs/compile rr/load-shader)]
+       (bgfx create-program vertex fragment true)) ; third arg is destroyShaders
+    #(bgfx destroy-program %)]
+   :view-buf
+   [#(MemoryUtil/memAllocFloat 16)
+    #(MemoryUtil/memFree %)]
+   :proj-buf
+   [#(MemoryUtil/memAllocFloat 16)
+    #(MemoryUtil/memFree %)]
+   :model-buf
+   [#(MemoryUtil/memAllocFloat 16)
+    #(MemoryUtil/memFree %)]})
 
 (defn renderer
   [{:keys [view-buf proj-buf model-buf vbh ibh program] :as context}
@@ -159,4 +155,8 @@ void main()
 
 (comment
   (@main/refresh-thread!)
+  (defonce debug (atom nil))
+  (deref debug)
+  (reset! debug nil)
+  (add-tap #(swap! debug conj %))
   )
