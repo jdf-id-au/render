@@ -84,9 +84,9 @@ void main() {
    [#(rr/make-index-buffer (:indices %) cube-indices)
     #(bgfx destroy-index-buffer %)
     #{:indices}]
-   :shader-program
+   :shading-program
    [#(let [{:keys [vertex fragment]} (->> shaders :cubes rs/compile rr/load-shader)]
-       (bgfx create-program vertex fragment true)) ; third arg is destroyShaders
+       (bgfx create-program vertex fragment true)) ; true destroyShaders
     #(bgfx destroy-program %)]
    :u-id
    [#(bgfx create-uniform "u_id" (BGFX uniform-type-vec4) 1)
@@ -123,8 +123,9 @@ void main() {
                  (BGFX sampler-v-clamp)) nil)
     #(bgfx destroy-texture %)]
    :fb-id
-   [#(bgfx create-frame-buffer-from-handles
-       (doto (ShortBuffer/allocate 2) (.put (short-array [(:t-id %) (:d-id %)]))) true)
+   [#(let [sa (short-array [(:t-id %) (:d-id %)])
+           sb (doto (MemoryUtil/memAllocShort 2) (.put sa) .flip)] ; FIXME prob leaks
+       (bgfx create-frame-buffer-from-handles sb true)) ; true destroyTextures
     #(bgfx destroy-frame-buffer %)
     #{:t-id :d-id}]
    :picking-program
