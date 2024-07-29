@@ -72,6 +72,10 @@ void main() {
 
 (def id-dim 8)
 
+(comment
+  (rr/check-setup context)
+  )
+
 (def context
   "Map of resource -> [create-fn destroy-fn] or [create-fn destroy-fn deps]"
   {:layout
@@ -169,6 +173,7 @@ void main() {
                (.setPerspectiveLH fov-radians aspect near far
                  (not (.homogeneousDepth (bgfx get-caps)))))
 
+        ;; potentially stack-allocated subject to jvm escape analysis?
         cur-x (double-array 1) cur-y (double-array 1)
         win-w (int-array 1) win-h (int-array 1)
         view-inv (.invert view (Matrix4x3f.))

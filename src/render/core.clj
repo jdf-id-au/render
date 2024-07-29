@@ -59,35 +59,6 @@
   ;; TODO could eventually track multiple threads/windows...
   (atom (fn [] (throw (ex-info "No thread refresher yet" {})))))
 
-(defn make-setup [context]
-  (let [order (ru/deps-order (for [[k [_ _ deps]] context, d deps] [k d]))]
-    [(fn setup []
-       (loop [acc {}
-              [k & r] (into (keys context) (reverse order))]
-         (if k
-           (if (acc k)
-             (recur acc r)
-             (let [[create! _ deps] (context k)]
-               (recur (assoc acc k
-                        (do #_(println "Creating" (name k)
-                              (if (seq deps) (str "which depends on " deps) ""))
-                            (if (seq deps)
-                              (create! acc)
-                              (create!)))) r)))
-           acc)))
-     (fn teardown [m]
-       (reduce (fn [acc k]
-                 (if-let [target (acc k)]
-                   (let [[_ destroy! _] (context k)]
-                     #_(println "Destroying" (name k) target)
-                     (try
-                       (destroy! target)
-                       (catch Exception e ; invisible otherwise! because effectively within a (finally ...)?
-                         (println "Failed to destroy" (name k) target e)))
-                     (dissoc acc k))
-                   acc))
-         m (into (keys context) order)))]))
-
 (defn make-graphics-thread [window width height
                             context-var renderer-var]
   (println "🎨 Making graphics thread from" (ru/current-thread))
@@ -103,7 +74,7 @@
        (fn []
          (println "Graphics thread running on" (ru/current-thread))
          (try
-           (let [[setup-fn teardown-fn] (make-setup (var-get context-var))]
+           (let [[setup-fn teardown-fn] (rr/make-setup (var-get context-var))]
              (with-resource [session
                              (rr/open-bgfx-session window width height)
                              rr/close-bgfx-session

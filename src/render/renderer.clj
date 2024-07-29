@@ -1,5 +1,5 @@
 (ns render.renderer
-  (:require [render.util :refer [with-resource glfw GLFW bgfx BGFX]]
+  (:require [render.util :as ru :refer [with-resource glfw GLFW bgfx BGFX]]
             [clj-commons.primitive-math :as m]
             [clojure.java.io :as io])
   (:import (java.util.function Consumer)
@@ -107,6 +107,39 @@
   "e.g. (supported? (BGFX caps-texture-blit))"
   [cap]
   (not (zero? (bit-and cap (.supported (bgfx get-caps))))))
+
+(defn check-setup
+  [context] ; TODO more functionality
+  {:deps (ru/dag (for [[k [_ _ deps]] context, d deps] [k d]))})
+
+(defn make-setup [context]
+  (let [order (ru/deps-order (for [[k [_ _ deps]] context, d deps] [k d]))]
+    [(fn setup []
+       (loop [acc {}
+              [k & r] (into (keys context) (reverse order))]
+         (if k
+           (if (acc k)
+             (recur acc r)
+             (let [[create! _ deps] (context k)]
+               (recur (assoc acc k
+                        (do #_(println "Creating" (name k)
+                              (if (seq deps) (str "which depends on " deps) ""))
+                            (if (seq deps)
+                              (create! acc)
+                              (create!)))) r)))
+           acc)))
+     (fn teardown [m]
+       (reduce (fn [acc k]
+                 (if-let [target (acc k)]
+                   (let [[_ destroy! _] (context k)]
+                     #_(println "Destroying" (name k) target)
+                     (try
+                       (destroy! target)
+                       (catch Exception e ; invisible otherwise! because effectively within a (finally ...)?
+                         (println "Failed to destroy" (name k) target e)))
+                     (dissoc acc k))
+                   acc))
+         m (into (keys context) order)))]))
 
 (defonce refresh! ; ═══════════════════════════════════════════════════ renderer
   (atom (fn [] (throw (ex-info "No renderer refresher yet" {})))))
