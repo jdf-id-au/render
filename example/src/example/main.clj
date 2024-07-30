@@ -18,8 +18,10 @@
 (comment
   ;; Windows, from emacs: M-:
   ;;(setq cider-clojure-cli-global-options "-A:windows-x64")
-  ;; then cider-jack-in-clj and eval:
-  (-main)
+  ;; then cider-jack-in-clj, cider-load-buffer, and eval:
+  (-main) ; although seems slow to eval within emacs
+  ;; vs:
+  ;; PS> clj -M:windows-x64 -m example.main
   
   ;; Mac, from terminal:
   ;; % clj -M:macos-x64 -m example.main

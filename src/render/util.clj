@@ -2,7 +2,7 @@
   (:require [clojure.string :as str])
   (:import (java.io File)))
 
-(defmacro with-resource ; from jdf/comfort, to remove dependency
+(defmacro with-resource ; ───────────────────────── pseudo-RAII from jdf/comfort
   "bindings => [name init deinit ...]
 
   Evaluates body in a try expression with names bound to the values

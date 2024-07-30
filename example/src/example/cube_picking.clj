@@ -166,24 +166,27 @@ void main() {
         proj (doto (Matrix4f.)
                (.setPerspectiveLH fov-radians aspect near far
                  (not (.homogeneousDepth (bgfx get-caps)))))
+        inv-proj (Matrix4f.)
+        _ (.invert proj inv-proj)
 
         ;; potentially stack-allocated subject to jvm escape analysis?
         ;; not guaranteed not to be moved?? risk invalidating glfw's "pointer"?
         ;; revert to MemoryUtil and explicit frees if crashy
         view-buf (float-array 16)
         proj-buf (float-array 16)
-        inv-proj-buf (float-array 16)
         model-buf (float-array 16)
+
+        ;; TODO explore bgfx window/fb size concepts
         cur-x (double-array 1) cur-y (double-array 1)
         win-w (int-array 1) win-h (int-array 1)
-        view-inv (.invert view (Matrix4x3f.))
+        _ (glfw get-cursor-pos window cur-x cur-y)
+        _ (glfw get-window-size window win-w win-h)
 
         encoder (bgfx encoder-begin false)]
 
-    ;; TODO explore bgfx window/fb size concepts
-    (glfw get-cursor-pos window cur-x cur-y)
-    (glfw get-window-size window win-w win-h)
-    (doseq [[i s] (map-indexed vector [(format "x=%.2f" (get cur-x 0))
+    (doseq [[i s] (map-indexed vector [(format "t=%.2f" time)
+                                       (format "f=%.2f" frame-time)
+                                       (format "x=%.2f" (get cur-x 0))
                                        (format "y=%.2f" (get cur-y 0))
                                        (format "w=%d" (get win-w 0))
                                        (format "h=%d" (get win-h 0))])]
