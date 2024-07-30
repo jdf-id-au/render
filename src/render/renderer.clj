@@ -150,9 +150,11 @@
   [window width height]
   (println "Making renderer")
   (with-resource [stack (MemoryStack/stackPush) nil
-                     init (BGFXInit/malloc stack) nil]
+                  init (BGFXInit/malloc stack) nil]
     (bgfx init-ctor init)
-    (.resolution init (reify Consumer ; does this mean it should detect change?
+    ;; backbuffer resolution and reset
+    ;; "Passes the resolution field to the specified Consumer"...
+    (.resolution init (reify Consumer ; how/why like this?
                         (accept [this o]
                           (.width o width)
                           (.height o height)
@@ -174,8 +176,7 @@
     (assert (bgfx init init))
     (println "bgfx renderer:" (bgfx get-renderer-name (bgfx get-renderer-type)))
     (bgfx set-debug (BGFX debug-text))
-    (bgfx set-view-clear 0 (bit-or (BGFX clear-color) (BGFX clear-depth))
-      0x303030ff 1.0 0)))
+    (bgfx set-view-clear 0 (BGFX clear-color clear-depth) 0x303030ff 1.0 0)))
 
 (defn close-bgfx-session [_]
   (println "Closing renderer")
