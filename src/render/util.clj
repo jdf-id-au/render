@@ -23,7 +23,7 @@
     :else (throw (IllegalArgumentException.
                    "with-resource only allows Symbols in bindings"))))
 
-(defn kebab->pascal [s]
+(defn kebab->pascal [s] ; ────────────────────────────── ergonomic abbreviations
   (let [segs (str/split (str s) #"-")]
     (->> segs (map str/capitalize) (apply str))))
 
@@ -35,46 +35,47 @@
 
 ;; TODO gen/import docs for repl use...
 
+(defn rename
+  [prefix converter sym]
+  (symbol (str prefix (converter sym))))
+
 (defmacro bgfx
   "Briefer function calls"
   {:clj-kondo/ignore [:unresolved-symbol]}
   [function-name & args]
-  (let [f# (symbol (str "org.lwjgl.bgfx.BGFX/bgfx_" (kebab->snake function-name)))]
-    `(~f# ~@args)))
+  (let [f (rename 'org.lwjgl.bgfx.BGFX/bgfx_ kebab->snake function-name)]
+    `(~f ~@args)))
 
-(defmacro BGFX ; TODO consider reader literals?
+(defmacro BGFX ; needs to be macro so can use unquoted symbols
   "Briefer enums"
   {:clj-kondo/ignore [:unresolved-symbol]}
-  [enum-name]
-  (symbol (str "org.lwjgl.bgfx.BGFX/BGFX_" (kebab->screaming-snake enum-name))))
+  [& enum-names]
+  (let [f (partial rename 'org.lwjgl.bgfx.BGFX/BGFX_ kebab->screaming-snake)
+        [e & r] (map f enum-names)]
+    (if r `(bit-or ~e ~@r) e)))
 
 (defmacro glfw
   "Briefer function calls"
   {:clj-kondo/ignore [:unresolved-symbol]}
   [function-name & args]
-  (let [f# (symbol (str "org.lwjgl.glfw.GLFW/glfw" (kebab->pascal function-name)))]
-    `(~f# ~@args)))
+  (let [f (rename 'org.lwjgl.glfw.GLFW/glfw kebab->pascal function-name)]
+    `(~f ~@args)))
 
 (defmacro GLFW
-  "Briefer enums" ; via `public static final long`?
+  "Briefer enums" ; via `public static final long` at least...
   {:clj-kondo/ignore [:unresolved-symbol]}
-  [enum-name]
-  (symbol (str "org.lwjgl.glfw.GLFW/GLFW_" (kebab->screaming-snake enum-name))))
+  [& enum-names]
+  (let [f (partial rename 'org.lwjgl.glfw.GLFW/GLFW_ kebab->screaming-snake)
+        [e & r] (map f enum-names)]
+    (if r `(bit-or ~e ~@r) e)))
 
-#_(defn cast->byte
-  "Cast u8 to i8 aka java byte.
-   u8 0        ..127      ..128      ..255
-   i8 0        ..127      ..-128     ..-1
-   0b 0000 0000..0000 1111..0001 0000..1111 1111
-   0x 00       ..7f       ..80       ..ff"
-  [i]
-  (byte (if (> i Byte/MAX_VALUE) (- i  0x100) i)))
-
-#_(defn cast->int
-  "Cast i64 aka long which should be u32 to i32
-   u32 0       .. 65536    .. 4294967296"
-  [i]
-  (int (if (> i Integer/MAX_VALUE) (- i 0x100000000) i)))
+(comment
+  ;; try C-c RET for cider-macroexpand-1
+  (bgfx create-frame-buffer-from-handles sb true)
+  (BGFX texture-blit-dst texture-read-back)
+  (glfw get-cursor-pos window cur-x cur-y)
+  (GLFW cocoa-retina-framebuffer)
+  )
 
 (defn current-thread []
   (.getName (Thread/currentThread)))

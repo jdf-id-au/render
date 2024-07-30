@@ -106,34 +106,31 @@ void main() {
     #(bgfx destroy-uniform %)]
    :t-id ; picking colour target
    [#(bgfx create-texture-2d id-dim id-dim false 1 (BGFX texture-format-rgba8)
-               (bit-or
-                 (BGFX texture-rt)
-                 (BGFX sampler-min-point)
-                 (BGFX sampler-mag-point)
-                 (BGFX sampler-mip-point)
-                 (BGFX sampler-u-clamp)
-                 (BGFX sampler-v-clamp)) nil)
+       (BGFX texture-rt
+         sampler-min-point
+         sampler-mag-point
+         sampler-mip-point
+         sampler-u-clamp
+         sampler-v-clamp) nil)
     #(bgfx destroy-texture %)]
    :d-id ; picking depth buffer
    [#(bgfx create-texture-2d id-dim id-dim false 1 (BGFX texture-format-d32f)
-               (bit-or
-                 (BGFX texture-rt)
-                 (BGFX sampler-min-point)
-                 (BGFX sampler-mag-point)
-                 (BGFX sampler-mip-point)
-                 (BGFX sampler-u-clamp)
-                 (BGFX sampler-v-clamp)) nil)
+       (BGFX texture-rt
+         sampler-min-point
+         sampler-mag-point
+         sampler-mip-point
+         sampler-u-clamp
+         sampler-v-clamp) nil)
     #(bgfx destroy-texture %)]
    :b-id ; CPU picking blit texture
    [#(bgfx create-texture-2d id-dim id-dim false 1 (BGFX texture-format-rgba8)
-               (bit-or
-                 (BGFX texture-blit-dst)
-                 (BGFX texture-read-back)
-                 (BGFX sampler-min-point)
-                 (BGFX sampler-mag-point)
-                 (BGFX sampler-mip-point)
-                 (BGFX sampler-u-clamp)
-                 (BGFX sampler-v-clamp)) nil)
+       (BGFX texture-blit-dst
+         texture-read-back
+         sampler-min-point
+         sampler-mag-point
+         sampler-mip-point
+         sampler-u-clamp
+         sampler-v-clamp) nil)
     #(bgfx destroy-texture %)]
    :fb-id
    [#(let [sa (short-array [(:t-id %) (:d-id %)])
