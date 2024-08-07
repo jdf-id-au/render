@@ -47,6 +47,7 @@
   (let [window
         (glfw create-window width height title MemoryUtil/NULL MemoryUtil/NULL)]
     (assert window)
+    (glfw set-window-pos window 0 0)
     window))
 
 (defn close-window [window]

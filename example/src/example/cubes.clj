@@ -1,23 +1,11 @@
 (ns example.cubes
   "Example project using jdf/render."
   (:require [render.renderer :as rr]
+            [render.core :as rc]
             [render.util :as ru :refer [with-resource glfw GLFW bgfx BGFX]]
             [render.shaders :as rs])
   (:import (org.lwjgl.system MemoryUtil)
            (org.joml Matrix4f Matrix4x3f Vector3f)))
-
-#_(defn debug-text
-  [cols lines]
-  ;; cols and lines seem to be ORIGINAL dimensions ("resolution") / 8x16
-  (bgfx dbg-text-clear 0 false)
-  (let [n (count logo/raw) ; 4000
-        pitch 160 ; image pitch in bytes (4x number of cols?)
-        lines (/ n 160) ; 25? meaning?
-        x (int (/ (- cols 40) 2))
-        y (int (/ (- lines 12) 2))]
-    ;; Coords in characters not pixels
-    (bgfx dbg-text-printf 0 0 0x1f (str cols "x" lines))
-    #_(bgfx dbg-text-image  x y 40 12 (logo/logo) pitch)))
 
 (def callbacks
   {:mouse/button-1 (fn [window action] (println "button-1" window action))
@@ -47,7 +35,7 @@ void main()
 	gl_FragColor = v_color0;
 }"}})
 
-(rs/compile (:cubes shaders))
+(add-watch #'shaders :refresh (fn [_ _ _ _] (@rc/refresh-thread!)))
 
 (def cube-vertices
   [[-1.  1.  1. 0xff000000] ;; Double Double Double Long
@@ -106,6 +94,13 @@ void main()
    [#(MemoryUtil/memAllocFloat 16)
     #(MemoryUtil/memFree %)]})
 
+(comment ; blank renderer
+  (defn renderer [_ _ width height _ _ ]
+    (bgfx set-view-rect 0 0 0 width height)
+    (bgfx touch 0)
+    )
+  )
+
 (defn renderer
   [{:keys [view-buf proj-buf model-buf vbh ibh program] :as context}
    status width height time frame-time]
@@ -152,11 +147,3 @@ void main()
       (bgfx encoder-submit encoder 0 program 0 0))
     
     (bgfx encoder-end encoder)))
-
-(comment
-  (@main/refresh-thread!)
-  (defonce debug (atom nil))
-  (deref debug)
-  (reset! debug nil)
-  (add-tap #(swap! debug conj %))
-  )

@@ -4,7 +4,7 @@
             [render.util :as ru :refer [with-resource glfw GLFW bgfx BGFX]]
             [render.shaders :as rs])
   (:import (org.lwjgl.system MemoryUtil)
-           (org.joml Matrix4f Matrix4x3f Vector3f)))
+           (org.joml Matrix4f Matrix4x3f Vector3f Vector4f)))
 
 (def callbacks
   {:mouse/button-1 (fn [window action] (println "button-1" window action))
@@ -20,7 +20,7 @@ vec4 a_color0 : COLOR0;"
 $input a_position, a_color0
 $output v_color0
 void main() {
-  gl_Position = mul(u_modelViewProj, vec4(a_position, 1.0) );
+  gl_Position = mul(u_modelViewProj, vec4(a_position, 1.0));
   v_color0 = a_color0;
 }"})
 
@@ -107,30 +107,21 @@ void main() {
    :t-id ; picking colour target
    [#(bgfx create-texture-2d id-dim id-dim false 1 (BGFX texture-format-rgba8)
        (BGFX texture-rt
-         sampler-min-point
-         sampler-mag-point
-         sampler-mip-point
-         sampler-u-clamp
-         sampler-v-clamp) nil)
+         sampler-min-point sampler-mag-point sampler-mip-point
+         sampler-u-clamp sampler-v-clamp) nil)
     #(bgfx destroy-texture %)]
    :d-id ; picking depth buffer
    [#(bgfx create-texture-2d id-dim id-dim false 1 (BGFX texture-format-d32f)
        (BGFX texture-rt
-         sampler-min-point
-         sampler-mag-point
-         sampler-mip-point
-         sampler-u-clamp
-         sampler-v-clamp) nil)
+         sampler-min-point sampler-mag-point sampler-mip-point
+         sampler-u-clamp sampler-v-clamp) nil)
     #(bgfx destroy-texture %)]
    :b-id ; CPU picking blit texture
    [#(bgfx create-texture-2d id-dim id-dim false 1 (BGFX texture-format-rgba8)
        (BGFX texture-blit-dst
          texture-read-back
-         sampler-min-point
-         sampler-mag-point
-         sampler-mip-point
-         sampler-u-clamp
-         sampler-v-clamp) nil)
+         sampler-min-point sampler-mag-point sampler-mip-point
+         sampler-u-clamp sampler-v-clamp) nil)
     #(bgfx destroy-texture %)]
    :fb-id
    [#(let [sa (short-array [(:t-id %) (:d-id %)])
@@ -154,7 +145,7 @@ void main() {
   
   (let [at (Vector3f. 0. 0. 0.)
         eye (Vector3f. (* 10 #_(Math/tan time)) (* 30 (Math/sin time)) -35. )
-        view (doto (Matrix4x3f.)
+        view (doto (Matrix4x3f.) ; 4 rows 3 cols
                (.setLookAtLH
                  (.x eye) (.y eye) (.z eye)
                  (.x at) (.y at) (.z at)
@@ -166,8 +157,6 @@ void main() {
         proj (doto (Matrix4f.)
                (.setPerspectiveLH fov-radians aspect near far
                  (not (.homogeneousDepth (bgfx get-caps)))))
-        inv-proj (Matrix4f.)
-        _ (.invert proj inv-proj)
 
         ;; potentially stack-allocated subject to jvm escape analysis?
         ;; not guaranteed not to be moved?? risk invalidating glfw's "pointer"?
@@ -181,6 +170,59 @@ void main() {
         win-w (int-array 1) win-h (int-array 1)
         _ (glfw get-cursor-pos window cur-x cur-y)
         _ (glfw get-window-size window win-w win-h)
+        cur-ndc-x (-> (get cur-x 0) (/ (get win-w 0)) (* 2) (- 1))
+        cur-ndc-y (-> (get cur-y 0) (/ (get win-h 0)) (* 2) (- 1))
+
+        ;; #backtoschool
+        ;; which joml operation corresponds to bx::mulH ?
+        ;; bx::mulH takes vec3 and mat4 and gives vec3
+        ;; where mat4 is numbered (apparently row-major)
+        ;; 0 1 2 3
+        ;; 4 5 6 7
+        ;; 8 9 . .
+        ;; . . . .
+        
+        ;; giving
+        ;; x = v0*m0 + v1*m4 + v2*m8 + m12
+        ;; y = v0*m1 + v1*m5 + v2*m9 + m13
+        ;; z = v0*m2 + v1*v6 + v2*m10 + m14
+        ;; w = v0*m3 + v1*v7 + v2*m11 + m15
+        ;; but each of xyz * sign(w)/w where sign is -1, 0, or 1
+        ;; 
+        ;; so it's like left-multiplying (shapes)
+        ;; abcd . AEIM = A = abcd
+        ;;        BFJN   B
+        ;;        CGKO   C
+        ;;        DHLP   D
+        ;; linear combination of matrix' rows:
+        ;; aA+bB+cC+dD
+        ;; aE+bF+cG+dH
+        ;; aI+bJ+cK+dL
+        ;; aM+aN+aO+aP
+        ;;
+        ;; where input d is 1 and output d is effectively abs(1/(aM+aN+aO+aP)) ?
+
+        inv-proj (Matrix4f.)
+        _ (.invert proj inv-proj)
+
+        pick-at (doto (Vector4f. cur-ndc-x cur-ndc-y 1. 1.)
+                  (.mul inv-proj)) ; FIXME w thing
+        pick-eye (doto (Vector4f. cur-ndc-x cur-ndc-y 0. 1.)
+                   (.mul inv-proj)) ; FIXME w thing
+
+        ;; Look at unprojected point
+        pick-view (doto (Matrix4x3f.)
+                    (.setLookAtLH
+                      (.x pick-eye) (.y pick-eye) (.z pick-eye)
+                      (.x pick-at) (.y pick-at) (.z pick-at)
+                      0. 1. 0.))
+        
+        pick-proj (doto (Matrix4f.)
+                    (.setPerspectiveLH fov-radians aspect near far
+                      (not (.homogeneousDepth (bgfx get-caps)))))
+        
+        pick-view-buf (float-array 16)
+        pick-proj-buf (float-array 16)
 
         encoder (bgfx encoder-begin false)]
 
@@ -189,8 +231,15 @@ void main() {
                                        (format "x=%.2f" (get cur-x 0))
                                        (format "y=%.2f" (get cur-y 0))
                                        (format "w=%d" (get win-w 0))
-                                       (format "h=%d" (get win-h 0))])]
+                                       (format "h=%d" (get win-h 0))
+                                       (format "nx=%.2f" cur-ndc-x)
+                                       (format "ny=%.2f" cur-ndc-y)])]
       (bgfx dbg-text-printf 0 i 0x1f s))
+
+    (bgfx set-view-rect (:id render-pass) 0 0 id-dim id-dim)
+    (bgfx set-view-transform (:id render-pass)
+          (.get4x4 pick-view pick-view-buf)
+          (.get pick-proj pick-proj-buf))
     
     (bgfx set-view-rect (:shading render-pass) 0 0 width height)
     (bgfx set-view-transform (:shading render-pass)
@@ -208,8 +257,11 @@ void main() {
                 (-> yy (* 0.37) (+ time))
                 0.)
               (.get4x4 model-buf)))
+      ;; ?, stream, handle, startvertex, numvertices
       (bgfx encoder-set-vertex-buffer encoder 0 vbh 0 8)
+      ;; ?, handle, firstindex, numindices
       (bgfx encoder-set-index-buffer encoder ibh 0 36)
+      ;; ?, state, rgba
       (bgfx encoder-set-state encoder (BGFX state-default) 0)
       (bgfx encoder-submit encoder (:shading render-pass) shading-program 0 0))
     
