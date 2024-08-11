@@ -140,12 +140,10 @@ void main() {
   [{:keys [ vbh ibh
            shading-program] :as context}
    {:keys [window] :as status} width height time frame-time]
-  #_(bgfx touch (:shading render-pass))
-  #_(bgfx dbg-text-printf 0 0 0x1f (str (format "%.2f" frame-time)))
   
   (let [at (Vector3f. 0. 0. 0.)
         eye (Vector3f. (* 10 #_(Math/tan time)) (* 30 (Math/sin time)) -35. )
-        view (doto (Matrix4x3f.) ; 4 rows 3 cols
+        view (doto (Matrix4x3f.) ; 4 cols 3 rows, against mathematical convention
                (.setLookAtLH
                  (.x eye) (.y eye) (.z eye)
                  (.x at) (.y at) (.z at)
@@ -212,7 +210,7 @@ void main() {
 
         ;; Look at unprojected point
         pick-view (doto (Matrix4x3f.)
-                    (.setLookAtLH
+                    (.setLookAtLH ; left-handed
                       (.x pick-eye) (.y pick-eye) (.z pick-eye)
                       (.x pick-at) (.y pick-at) (.z pick-at)
                       0. 1. 0.))
@@ -238,6 +236,9 @@ void main() {
 
     (bgfx set-view-rect (:id render-pass) 0 0 id-dim id-dim)
     (bgfx set-view-transform (:id render-pass)
+          ;; store "4x3" (colxrow, opposite of mathematical convention)
+          ;; matrix as 4x4 in column-major order into buf
+          ;; where last row is 0 0 0 1
           (.get4x4 pick-view pick-view-buf)
           (.get pick-proj pick-proj-buf))
     
@@ -257,12 +258,13 @@ void main() {
                 (-> yy (* 0.37) (+ time))
                 0.)
               (.get4x4 model-buf)))
-      ;; ?, stream, handle, startvertex, numvertices
+      ;; encoder, stream, handle, startvertex, numvertices
       (bgfx encoder-set-vertex-buffer encoder 0 vbh 0 8)
-      ;; ?, handle, firstindex, numindices
+      ;; encoder, handle, firstindex, numindices
       (bgfx encoder-set-index-buffer encoder ibh 0 36)
-      ;; ?, state, rgba
+      ;; encoder, state, rgba
       (bgfx encoder-set-state encoder (BGFX state-default) 0)
+      ;; encoder, view_id, program, depth, flags
       (bgfx encoder-submit encoder (:shading render-pass) shading-program 0 0))
     
     (bgfx encoder-end encoder)))
