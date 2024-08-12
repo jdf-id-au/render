@@ -8,7 +8,7 @@
 (defn -main [& args]
   (rc/main
     {:renderer [#'picking/context #'picking/renderer]
-     :window [1920 1200 "picking"]
+     :window [800 600 "picking"]
      :callbacks #'picking/callbacks})
   #_(rc/main
     {:renderer [#'cubes/context #'cubes/renderer]

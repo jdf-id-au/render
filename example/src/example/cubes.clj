@@ -35,7 +35,7 @@ void main()
 	gl_FragColor = v_color0;
 }"}})
 
-(add-watch #'shaders :refresh (fn [_ _ _ _] (@rc/refresh-thread!)))
+(add-watch #'shaders :refresh (fn [_ _ _ _] (@rc/refresh!)))
 
 (def cube-vertices
   [[-1.  1.  1. 0xff000000] ;; Double Double Double Long

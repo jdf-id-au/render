@@ -56,7 +56,7 @@
 
 (defonce retry-on-window-close? (atom true)) ; without quitting REPL and JVM
 
-(defonce refresh-thread! ; ═════════════════════════════════════ graphics thread
+(defonce refresh! ; ════════════════════════════════════════════ graphics thread
   ;; TODO could eventually track multiple threads/windows...
   (atom (fn [] (throw (ex-info "No thread refresher yet" {})))))
 
@@ -65,7 +65,7 @@
   (println "🎨 Making graphics thread from" (ru/current-thread))
   (add-watch context-var :refresh
     (fn [k r o n] (println "Refreshing graphics thread for renderer context")
-      (@refresh-thread!)))
+      (@refresh!)))
   (add-watch renderer-var :refresh
     (fn [k r o n] (println "Refreshing renderer")
       (@rr/refresh!)))
@@ -84,7 +84,7 @@
                (swap! status assoc
                  :renderer-var renderer-var
                  :started (glfw get-timer-value))
-               (reset! refresh-thread!
+               (reset! refresh!
                  (fn [] (swap! status dissoc :renderer-var) (glfw post-empty-event)))
                (reset! rr/refresh!
                  (fn [] (swap! status assoc :renderer-var renderer-var)))

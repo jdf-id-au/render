@@ -176,6 +176,7 @@
     (assert (bgfx init init))
     (println "bgfx renderer:" (bgfx get-renderer-name (bgfx get-renderer-type)))
     (bgfx set-debug (BGFX debug-text))
+    ;; view-id, flags, rgba, depth, stencil
     (bgfx set-view-clear 0 (BGFX clear-color clear-depth) 0x303030ff 1.0 0)))
 
 (defn close-bgfx-session [_]
