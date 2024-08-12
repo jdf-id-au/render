@@ -144,3 +144,20 @@
                     (recur (conj queue dk) dr)
                     queue)))]
     (distinct queue)))
+
+(defn hex-str ; ─────────────────────────────────── represent and convert things
+  "Just show the int as hex. e.g. 16 -> 0x10" ; how to output literal 0x10? custom pretty-printer?
+  [i]
+  (str "0x" (Integer/toUnsignedString (unchecked-int i) 16)))
+
+(defn rgba->argb [i]
+  (let [rgb (bit-and (bit-shift-right i 8) 0xFFFFFF)
+        a (bit-and i 0xFF)]
+    (unchecked-int (+ (bit-shift-left a 24) rgb))))
+
+(comment
+  (hex-str (rgba->argb 0xaabbccdd)) ; => "0xddaabbcc"
+  (hex-str (rgba->argb 0xaabbcc00)) ; => "0xaabbcc"
+  (hex-str (rgba->argb 0xaabbccff)) ; => "0xffaabbcc"
+  (hex-str (rgba->argb 0xffff95bf)) ; => "0xbfffff95"
+  )

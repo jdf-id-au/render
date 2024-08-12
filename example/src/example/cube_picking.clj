@@ -1,7 +1,8 @@
 (ns example.cube-picking
   "Example project using jdf/render."
   (:require [render.renderer :as rr]
-            [render.util :as ru :refer [with-resource glfw GLFW bgfx BGFX]]
+            [render.util :as ru :refer [with-resource glfw GLFW bgfx BGFX
+                                        hex-str rgba->argb]]
             [render.shaders :as rs]
             [clojure.java.io :as io])
   (:import (org.lwjgl.system MemoryUtil)
@@ -59,7 +60,7 @@ void main() {
   [0 1 2, 1 3 2, 4 6 5, 5 6 7, 0 2 4, 4 2 6,
    1 5 3, 5 7 3, 0 4 1, 4 5 1, 2 3 6, 6 3 7])
 
-(def render-pass
+(def pass
   "bgfx_view_id_t"
   {:shading 0
    :id 1
@@ -69,6 +70,12 @@ void main() {
 
 (defn id->uniform [x y]
   (float-array [(/ x 12.) (/ y 12.) 1. 1.]))
+
+(defn rgba->id [i]
+  (let [r (bit-and (bit-shift-right i 24) 0xFF)
+        g (bit-and (bit-shift-right i 16) 0xFF)
+        id #(-> % float (/ 0xFF) (* 12))]
+    [(id r) (id g)]))
 
 (comment
   (rr/check-setup context)
@@ -119,22 +126,14 @@ void main() {
                         (bgfx create-program vertex fragment true))
                      #(bgfx destroy-program %)]})
 
-(defn rgba->argb [i]
-  (let [rgb (bit-and (bit-shift-right i 8) 0xFFFFFF)
-        a (bit-and i 0xFF)]
-    (+ (bit-shift-left a 24) rgb)))
-
-(comment
-  (Integer/toUnsignedString (unchecked-int (rgba->argb 0xaabbccdd)) 16) ; => "ddaabbcc"
-  )
-
 (defn renderer
   [{:keys [vertex-buffer index-buffer shading-program
-           pick-uniform pick-target pick-blit-texture pick-data picking-program] :as context}
+           pick-uniform pick-target pick-depth-buffer pick-blit-texture pick-data
+           pick-framebuffer picking-program] :as context}
    {:keys [window] :as status} width height time frame-time]
   
   (let [at (Vector3f. 0. 0. 0.)
-        eye (Vector3f. (* 50. (Math/sin time)) #_0. 0. -40.)
+        eye (Vector3f. 0. 0. -40.)
         up (Vector3f. 0. 1. 0.)
         view (.setLookAtLH (Matrix4x3f.) eye at up) ; left-handed; 4 cols vs math convention
         
@@ -175,15 +174,17 @@ void main() {
       (bgfx dbg-text-printf 0 i 0x1f s))
 
     ;; Additional render pass is needed to inspect a previous pass' generated image
-    (bgfx set-view-clear (:id render-pass) (BGFX clear-color clear-depth)
+    (bgfx set-view-clear (:id pass) (BGFX clear-color clear-depth)
           0x000000ff 1.0 0) ; should be in setup
-    (bgfx set-view-rect (:id render-pass) 0 0 pick-dim pick-dim)
-    (bgfx set-view-transform (:id render-pass)
+
+    (bgfx set-view-frame-buffer (:id pass) pick-framebuffer)
+    (bgfx set-view-rect (:id pass) 0 0 pick-dim pick-dim)
+    (bgfx set-view-transform (:id pass)
           (.get4x4 pick-view (float-array 16))
           (.get pick-proj (float-array 16)))
     
-    (bgfx set-view-rect (:shading render-pass) 0 0 width height)
-    (bgfx set-view-transform (:shading render-pass)
+    (bgfx set-view-rect (:shading pass) 0 0 width height)
+    (bgfx set-view-transform (:shading pass)
           (.get4x4 view (float-array 16))
           (.get proj (float-array 16)))
     (doseq [yy (range 12) xx (range 12)]
@@ -205,14 +206,17 @@ void main() {
       ;; encoder, state, rgba
       (bgfx encoder-set-state encoder (BGFX state-default) 0)
       ;; submit primitive for rendering: encoder, view_id, program, depth, flags
-      (bgfx encoder-submit encoder (:shading render-pass) shading-program 0 0)
+      (bgfx encoder-submit encoder (:shading pass) shading-program 0 0)
 
       ;; encoder, handle, value, numelements
-      (bgfx encoder-set-uniform encoder pick-uniform (id->uniform xx yy) 1)
-      (bgfx encoder-submit encoder (:id render-pass) picking-program 0 0)
+      (let [iu (id->uniform xx yy)]
+        #_(when @save?
+          (println "trying" xx yy (get iu 0) (get iu 1))) ; working
+        (bgfx encoder-set-uniform encoder pick-uniform iu 1))
+      (bgfx encoder-submit encoder (:id pass) picking-program 0 0)
       )
 
-    (bgfx encoder-blit encoder (:id render-pass)
+    (bgfx encoder-blit encoder (:blit pass)
           pick-blit-texture 0 0 0 0 ; dest mip x y z
           pick-target 0 0 0 0 ; src mip x y z
           pick-dim pick-dim 0) ; w h d
@@ -221,8 +225,11 @@ void main() {
     (when @save?
       (let [im (BufferedImage. pick-dim pick-dim BufferedImage/TYPE_INT_ARGB)
             ib (.asIntBuffer pick-data)]
-        (doseq [x (range pick-dim) y (range pick-dim)]
-          (.setRGB im x y (rgba->argb (.get ib (+ (* x pick-dim) y)))))
+        (doseq [x (range pick-dim) y (range pick-dim)
+                :let [i (+ (* x pick-dim) y)
+                      v (.get ib i)]]
+          (println x y (hex-str v) (rgba->id )) 
+          (.setRGB im x y (rgba->argb v))) ; all 0x0810847FF rgba
         (ImageIO/write im "png" (io/file "wtf.png"))
         (swap! save? not)))
     (bgfx encoder-end encoder)))
