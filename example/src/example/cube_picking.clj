@@ -71,7 +71,7 @@ void main() {
    :id 1
    :blit 2})
 
-(def pick-dim #_8 256)
+(def pick-dim 128 #_8)
 
 (defn id->uniform [x y]
   (float-array [(/ x 12.) (/ y 12.) 1. 1.])) ; rgba here, reads back as abgr!
@@ -156,7 +156,7 @@ void main() {
         _ (glfw get-cursor-pos window cur-x cur-y)
         _ (glfw get-window-size window win-w win-h)
         ;; ───────────────────────────────────────────────────────────── picking
-        view-proj (.mul (Matrix4f. view) proj)
+        view-proj #_(.mul (Matrix4f. proj) view) (.mul (Matrix4f. view) proj)
         pick-at (Vector3f.) ; more like pick-dir, same effect presumably
         pick-eye (Vector3f.)
         _ (.unprojectRay view-proj (get cur-x 0) (get cur-y 0)
@@ -165,7 +165,16 @@ void main() {
 
         pick-view (.setLookAtLH (Matrix4x3f.) pick-eye pick-at up)
         pick-proj (.setPerspectiveLH (Matrix4f.) fov-radians 1 near far z0-1?)
-        
+
+        ;; currently giving approx
+        ;; 6,6           5,6
+        ;;
+        ;; 6,5           5,5
+        ;; i.e. mainly too zoomed in (plus maybe flipped etc)
+        ;; instead of (maybe)
+        ;;  0, 0        11, 0
+        ;;
+        ;; 11, 1        11,11
         encoder (bgfx encoder-begin false)]
 
     (doseq [[i s] (map-indexed vector [(format "t=%.2f" time)
@@ -174,6 +183,10 @@ void main() {
                                          (get cur-x 0) (get cur-y 0))
                                        (format "wh=%d %d"
                                          (get win-w 0) (get win-h 0))
+                                       (format "exyz=%.2f %.2f %.2f"
+                                         (.x eye) (.y eye) (.z eye))
+                                       (format "axyz=%.2f %.2f %.2f"
+                                         (.x at) (.y at) (.z at))
                                        (format "pexyz=%.5f %.5f %.5f"
                                          (.x pick-eye) (.y pick-eye) (.z pick-eye))
                                        (format "paxyz=%.5f %.5f %.5f"
@@ -200,10 +213,10 @@ void main() {
               (.translation
                 (-> xx (* 3.) (- 15))
                 (-> yy (* 3.) (- 15))
-                (* 3. (Math/sin (+ time xx yy))))
+                -2. #_(* 3. (Math/sin (+ #_time xx yy)))) ; breaks pick view when pos; its proj must be broken
               (.rotateXYZ
-                (-> xx (* 0.21) (+ time))
-                (-> yy (* 0.37) (+ time))
+                (-> xx (* 0.21) #_ (+ time))
+                (-> yy (* 0.37) #_(+ time))
                 0.)
               (.get4x4 (float-array 16))))
       ;; encoder, stream, handle, startvertex, numvertices
@@ -232,7 +245,7 @@ void main() {
         (doseq [x (range pick-dim) y (range pick-dim)
                 :let [i (+ (* x pick-dim) y)
                       v (.get ib i)]]
-          (when (and (zero? x) (zero? y)) (println x y (hex-str v) (abgr->id v))) 
+          (when (= (/ pick-dim 2) x y) (println x y (hex-str v) (abgr->id v))) 
           (.setRGB im x y (abgr->argb v)))
         (ImageIO/write im "png" (io/file "wtf.png"))
         (swap! save? not)))
