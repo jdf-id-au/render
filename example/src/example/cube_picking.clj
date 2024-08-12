@@ -76,66 +76,61 @@ void main() {
 
 (def context
   "Map of resource -> [create-fn destroy-fn] or [create-fn destroy-fn deps]"
-  {:layout
-   [#(rr/make-vertex-layout false true 0) #(.free %)]
-   :vertices
-   [#(MemoryUtil/memAlloc (* 8 (+ (* 3 4) 4))) #(MemoryUtil/memFree %)]
-   :vbh
-   [#(rr/make-vertex-buffer (:vertices %) (:layout %) cube-vertices)
-    #(bgfx destroy-vertex-buffer %)
-    #{:vertices :layout}]
-   :indices
-   [#(MemoryUtil/memAlloc (* 2 (count cube-indices))) #(MemoryUtil/memFree %)]
-   :ibh
-   [#(rr/make-index-buffer (:indices %) cube-indices)
-    #(bgfx destroy-index-buffer %)
-    #{:indices}]
-   :shading-program
-   [#(let [{:keys [vertex fragment]} (->> shaders :cubes rs/compile rr/load-shader)]
-       (bgfx create-program vertex fragment true)) ; true destroyShaders
-    #(bgfx destroy-program %)]
-   :u-pick
-   [#(bgfx create-uniform "u_pick" (BGFX uniform-type-vec4) 1)
-    #(bgfx destroy-uniform %)]
-   :t-pick ; picking colour target
-   [#(bgfx create-texture-2d pick-dim pick-dim false 1 (BGFX texture-format-rgba8)
-       (BGFX texture-rt
-         sampler-min-point sampler-mag-point sampler-mip-point
-         sampler-u-clamp sampler-v-clamp) nil)
-    #(bgfx destroy-texture %)]
-   :d-pick ; picking depth buffer
-   [#(bgfx create-texture-2d pick-dim pick-dim false 1 (BGFX texture-format-d32f)
-       (BGFX texture-rt
-         sampler-min-point sampler-mag-point sampler-mip-point
-         sampler-u-clamp sampler-v-clamp) nil)
-    #(bgfx destroy-texture %)]
-   :b-pick ; CPU picking blit texture
-   [#(bgfx create-texture-2d pick-dim pick-dim false 1 (BGFX texture-format-rgba8)
-       (BGFX texture-blit-dst
-         texture-read-back
-         sampler-min-point sampler-mag-point sampler-mip-point
-         sampler-u-clamp sampler-v-clamp) nil)
-    #(bgfx destroy-texture %)]
-   :b-data
-   [#(MemoryUtil/memAlloc (* pick-dim pick-dim 4)) #(MemoryUtil/memFree %)]
-   :fb-pick
-   [#(let [sa (short-array [(:t-pick %) (:d-pick %)])
-           sb (doto (MemoryUtil/memAllocShort 2) (.put sa) .flip)] ; FIXME prob leaks
-       (bgfx create-frame-buffer-from-handles sb true)) ; true destroyTextures
-    #(bgfx destroy-frame-buffer %)
-    #{:t-pick :d-pick}]
-   :picking-program
-   [#(let [{:keys [vertex fragment]} (->> shaders :pick rs/compile rr/load-shader)]
-       (when-not (rr/supported? (BGFX caps-texture-blit))
-         (throw (ex-info "texture blit not supported" {:supported (.supported (bgfx get-caps))})))
-       (bgfx create-program vertex fragment true))
-    #(bgfx destroy-program %)]})
+  {:layout [#(rr/make-vertex-layout false true 0) #(.free %)]
+   :vertices [#(MemoryUtil/memAlloc (* 8 (+ (* 3 4) 4))) #(MemoryUtil/memFree %)]
+   :vertex-buffer [#(rr/make-vertex-buffer (:vertices %) (:layout %) cube-vertices)
+                   #(bgfx destroy-vertex-buffer %)
+                   #{:vertices :layout}]
+   :indices [#(MemoryUtil/memAlloc (* 2 (count cube-indices))) #(MemoryUtil/memFree %)]
+   :index-buffer [#(rr/make-index-buffer (:indices %) cube-indices)
+                  #(bgfx destroy-index-buffer %)
+                  #{:indices}]
+   :shading-program [#(let [{:keys [vertex fragment]} (->> shaders :cubes rs/compile rr/load-shader)]
+                        (bgfx create-program vertex fragment true)) ; true destroyShaders
+                     #(bgfx destroy-program %)]
+   :pick-uniform [#(bgfx create-uniform "u_pick" (BGFX uniform-type-vec4) 1)
+                  #(bgfx destroy-uniform %)]
+   :pick-target [#(bgfx create-texture-2d pick-dim pick-dim false 1 (BGFX texture-format-rgba8)
+                        (BGFX texture-rt
+                              sampler-min-point sampler-mag-point sampler-mip-point
+                              sampler-u-clamp sampler-v-clamp) nil)
+                 #(bgfx destroy-texture %)]
+   :pick-depth-buffer [#(bgfx create-texture-2d pick-dim pick-dim false 1 (BGFX texture-format-d32f)
+                              (BGFX texture-rt
+                                    sampler-min-point sampler-mag-point sampler-mip-point
+                                    sampler-u-clamp sampler-v-clamp) nil)
+                       #(bgfx destroy-texture %)]
+   :pick-blit-texture [#(bgfx create-texture-2d pick-dim pick-dim false 1 (BGFX texture-format-rgba8)
+                              (BGFX texture-blit-dst
+                                    texture-read-back
+                                    sampler-min-point sampler-mag-point sampler-mip-point
+                                    sampler-u-clamp sampler-v-clamp) nil)
+                       #(bgfx destroy-texture %)]
+   :pick-data [#(MemoryUtil/memAlloc (* pick-dim pick-dim 4)) #(MemoryUtil/memFree %)]
+   :pick-framebuffer [#(let [sa (short-array [(:pick-target %) (:pick-depth-buffer %)])
+                             sb (doto (MemoryUtil/memAllocShort 2) (.put sa) .flip)] ; FIXME prob leaks
+                         (bgfx create-frame-buffer-from-handles sb true)) ; true destroyTextures
+                      #(bgfx destroy-frame-buffer %)
+                      #{:pick-target :pick-depth-buffer}]
+   :picking-program [#(let [{:keys [vertex fragment]} (->> shaders :pick rs/compile rr/load-shader)]
+                        (when-not (rr/supported? (BGFX caps-texture-blit))
+                          (throw (ex-info "texture blit not supported"
+                                   {:supported (.supported (bgfx get-caps))})))
+                        (bgfx create-program vertex fragment true))
+                     #(bgfx destroy-program %)]})
 
+(defn rgba->argb [i]
+  (let [rgb (bit-and (bit-shift-right i 8) 0xFFFFFF)
+        a (bit-and i 0xFF)]
+    (+ (bit-shift-left a 24) rgb)))
 
+(comment
+  (Integer/toUnsignedString (unchecked-int (rgba->argb 0xaabbccdd)) 16) ; => "ddaabbcc"
+  )
 
 (defn renderer
-  [{:keys [vbh ibh shading-program
-           u-pick t-pick b-pick b-data picking-program] :as context}
+  [{:keys [vertex-buffer index-buffer shading-program
+           pick-uniform pick-target pick-blit-texture pick-data picking-program] :as context}
    {:keys [window] :as status} width height time frame-time]
   
   (let [at (Vector3f. 0. 0. 0.)
@@ -179,7 +174,7 @@ void main() {
                                          (.x pick-at) (.y pick-at) (.z pick-at))])]
       (bgfx dbg-text-printf 0 i 0x1f s))
 
-    
+    ;; Additional render pass is needed to inspect a previous pass' generated image
     (bgfx set-view-clear (:id render-pass) (BGFX clear-color clear-depth)
           0x000000ff 1.0 0) ; should be in setup
     (bgfx set-view-rect (:id render-pass) 0 0 pick-dim pick-dim)
@@ -204,30 +199,30 @@ void main() {
                 0.)
               (.get4x4 (float-array 16))))
       ;; encoder, stream, handle, startvertex, numvertices
-      (bgfx encoder-set-vertex-buffer encoder 0 vbh 0 8)
+      (bgfx encoder-set-vertex-buffer encoder 0 vertex-buffer 0 8)
       ;; encoder, handle, firstindex, numindices
-      (bgfx encoder-set-index-buffer encoder ibh 0 36)
+      (bgfx encoder-set-index-buffer encoder index-buffer 0 36)
       ;; encoder, state, rgba
       (bgfx encoder-set-state encoder (BGFX state-default) 0)
       ;; submit primitive for rendering: encoder, view_id, program, depth, flags
       (bgfx encoder-submit encoder (:shading render-pass) shading-program 0 0)
 
       ;; encoder, handle, value, numelements
-      (bgfx encoder-set-uniform encoder u-pick (id->uniform xx yy) 1)
+      (bgfx encoder-set-uniform encoder pick-uniform (id->uniform xx yy) 1)
       (bgfx encoder-submit encoder (:id render-pass) picking-program 0 0)
       )
 
     (bgfx encoder-blit encoder (:id render-pass)
-          b-pick 0 0 0 0 ; dest mip x y z
-          t-pick 0 0 0 0 ; src mip x y z
+          pick-blit-texture 0 0 0 0 ; dest mip x y z
+          pick-target 0 0 0 0 ; src mip x y z
           pick-dim pick-dim 0) ; w h d
-    (bgfx read-texture b-pick b-data 0) ; handle, data, mip
+    (bgfx read-texture pick-blit-texture pick-data 0) ; handle, data, mip
     
     (when @save?
       (let [im (BufferedImage. pick-dim pick-dim BufferedImage/TYPE_INT_ARGB)
-            ib (.asIntBuffer b-data)]
+            ib (.asIntBuffer pick-data)]
         (doseq [x (range pick-dim) y (range pick-dim)]
-          (.setRGB im x y (.get ib (+ (* x pick-dim) y))))
+          (.setRGB im x y (rgba->argb (.get ib (+ (* x pick-dim) y)))))
         (ImageIO/write im "png" (io/file "wtf.png"))
         (swap! save? not)))
     (bgfx encoder-end encoder)))

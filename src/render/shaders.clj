@@ -1,6 +1,12 @@
 (ns render.shaders
   "Build shaders; relies on host shell and version+platform matching binaries!
-  e.g. https://www.lwjgl.org/browse/release/3.3.4/macosx/x64/bgfx-tools"
+  e.g. https://www.lwjgl.org/browse/release/3.3.4/macosx/x64/bgfx-tools
+
+  https://stackoverflow.com/a/42044248/
+  - Uniforms are per-primitive parameters (constant during draw call).
+  - Attributes are per-vertex parameters (e.g. positions, normals, colours, UVs, ...).
+  - Varyings are per-fragment (per-pixel) parameters.
+  "
   ;; TODO lisp-curse-write shaders too? infer/learn/fake-until-make
   (:require [render.util :as ru]
             [clojure.string :as str]

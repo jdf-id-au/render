@@ -1,7 +1,6 @@
 (ns render.util
   (:require [clojure.string :as str])
-  (:import (java.io File)
-           (org.lwjgl.system MemoryUtil)))
+  (:import (java.io File)))
 
 (defmacro with-resource ; ───────────────────────── pseudo-RAII from jdf/comfort
   "bindings => [name init deinit ...]

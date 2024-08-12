@@ -127,6 +127,7 @@ void main()
                 (.get4x4 view view-buf)
                 (.get proj proj-buf))
 
+        ;; encoder is for multi-threaded draw call submission
         encoder (bgfx encoder-begin false)
         ]
     (doseq [yy (range 12) xx (range 12)]
