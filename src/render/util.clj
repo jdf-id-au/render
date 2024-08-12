@@ -155,7 +155,18 @@
         a (bit-and i 0xFF)]
     (unchecked-int (+ (bit-shift-left a 24) rgb))))
 
+(defn abgr->argb [i]
+  (let [a (bit-and (bit-shift-right i 24) 0xFF)
+        b (bit-and (bit-shift-right i 16) 0xFF)
+        g (bit-and (bit-shift-right i  8) 0xFF)
+        r (bit-and i 0xFF)]
+    (unchecked-int (+ (bit-shift-left a 24)
+                     (bit-shift-left r 16)
+                     (bit-shift-left g 8)
+                     b))))
+
 (comment
+  (hex-str 0xaabbccdd) ; => "0xaabbccdd"
   (hex-str (rgba->argb 0xaabbccdd)) ; => "0xddaabbcc"
   (hex-str (rgba->argb 0xaabbcc00)) ; => "0xaabbcc"
   (hex-str (rgba->argb 0xaabbccff)) ; => "0xffaabbcc"

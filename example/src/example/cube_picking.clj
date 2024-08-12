@@ -2,8 +2,9 @@
   "Example project using jdf/render."
   (:require [render.renderer :as rr]
             [render.util :as ru :refer [with-resource glfw GLFW bgfx BGFX
-                                        hex-str rgba->argb]]
+                                        hex-str abgr->argb]]
             [render.shaders :as rs]
+            [render.core :as rc]
             [clojure.java.io :as io])
   (:import (org.lwjgl.system MemoryUtil)
            (org.joml Matrix4f Matrix4x3f Vector3f Vector4f)
@@ -13,7 +14,8 @@
 (def save? (atom false))
 
 (def callbacks
-  {:mouse/button-1 (fn [window action] (println "saving!" window action @save?) (when (pos? action) (swap! save? not)))
+  {:mouse/button-1 (fn [window action] #_(println "saving!" window action @save?)
+                     (when (pos? action) (swap! save? not)))
    [:mouse/button-1 :mod/shift] (fn [window action] (println "shift-button-1"))
    #_#_:scroll (fn [window x y] (println "scroll " x " " y))})
 
@@ -42,9 +44,12 @@ void main() {
 $input v_color0
 uniform vec4 u_pick;
 void main() {
-  gl_FragColor.xyz = u_pick.xyz;
-  gl_FragColor.w = 1.0;
+  gl_FragColor.rgba = u_pick.rgba;
+  //gl_FragColor.b = 1.0;
+  //gl_FragColor.a = 1.0;
 }")})
+
+(add-watch #'shaders :refresh (fn [_ _ _ _] (@rc/refresh!)))
 
 (def cube-vertices
   [[-1.  1.  1. 0xff000000] ;; Double Double Double Long
@@ -66,14 +71,16 @@ void main() {
    :id 1
    :blit 2})
 
-(def pick-dim 8)
+(def pick-dim #_8 256)
 
 (defn id->uniform [x y]
-  (float-array [(/ x 12.) (/ y 12.) 1. 1.]))
+  (float-array [(/ x 12.) (/ y 12.) 1. 1.])) ; rgba here, reads back as abgr!
 
-(defn rgba->id [i]
-  (let [r (bit-and (bit-shift-right i 24) 0xFF)
-        g (bit-and (bit-shift-right i 16) 0xFF)
+(defn abgr->id [i]
+  (let [a (bit-and (bit-shift-right i 24) 0xFF)
+        b (bit-and (bit-shift-right i 16) 0xFF)
+        g (bit-and (bit-shift-right i  8) 0xFF)
+        r (bit-and i 0xFF)
         id #(-> % float (/ 0xFF) (* 12))]
     [(id r) (id g)]))
 
@@ -173,7 +180,7 @@ void main() {
                                          (.x pick-at) (.y pick-at) (.z pick-at))])]
       (bgfx dbg-text-printf 0 i 0x1f s))
 
-    ;; Additional render pass is needed to inspect a previous pass' generated image
+    ;; render pass is needed to inspect a previous pass' generated image
     (bgfx set-view-clear (:id pass) (BGFX clear-color clear-depth)
           0x000000ff 1.0 0) ; should be in setup
 
@@ -209,10 +216,7 @@ void main() {
       (bgfx encoder-submit encoder (:shading pass) shading-program 0 0)
 
       ;; encoder, handle, value, numelements
-      (let [iu (id->uniform xx yy)]
-        #_(when @save?
-          (println "trying" xx yy (get iu 0) (get iu 1))) ; working
-        (bgfx encoder-set-uniform encoder pick-uniform iu 1))
+      (bgfx encoder-set-uniform encoder pick-uniform (id->uniform xx yy) 1)
       (bgfx encoder-submit encoder (:id pass) picking-program 0 0)
       )
 
@@ -228,8 +232,8 @@ void main() {
         (doseq [x (range pick-dim) y (range pick-dim)
                 :let [i (+ (* x pick-dim) y)
                       v (.get ib i)]]
-          (println x y (hex-str v) (rgba->id )) 
-          (.setRGB im x y (rgba->argb v))) ; all 0x0810847FF rgba
+          (when (and (zero? x) (zero? y)) (println x y (hex-str v) (abgr->id v))) 
+          (.setRGB im x y (abgr->argb v)))
         (ImageIO/write im "png" (io/file "wtf.png"))
         (swap! save? not)))
     (bgfx encoder-end encoder)))
