@@ -72,18 +72,20 @@ void main() {
    :id 1
    :blit 2})
 
-(def pick-dim 128 #_8)
+(def pick-dim 64)
+
+(def encode #(-> % (* 20.) (/ 0xFF)))
+(def decode #(-> % (/ 20)))
 
 (defn id->uniform [x y]
-  (float-array [(/ x 12.) (/ y 12.) 1. 1.])) ; rgba here, reads back as abgr!
+  (float-array [(encode x) (encode y) 1. 1.])) ; rgba here, reads back as abgr!
 
 (defn abgr->id [i]
   (let [a (bit-and (bit-shift-right i 24) 0xFF)
         b (bit-and (bit-shift-right i 16) 0xFF)
         g (bit-and (bit-shift-right i  8) 0xFF)
-        r (bit-and i 0xFF)
-        id #(-> % float (/ 0xFF) (* 12))]
-    [(id r) (id g)]))
+        r (bit-and i 0xFF)]
+    [(decode r) (decode g)]))
 
 (comment
   (rr/check-setup context)
@@ -144,13 +146,13 @@ void main() {
   (let [at (Vector3f. 0. 0. 0.)
         eye (Vector3f. 0. 0. -30.)
         up (Vector3f. 0. 1. 0.)
-        ;; left-handed i.e. x right, y up, z away; 4 cols vs math convention
+        ;; left-handed i.e. x thumb right, y index up, z middle away; colxrow vs math convention
         view (.setLookAtLH (Matrix4x3f.) eye at up)
         
         fov 60. near 0.1 far 100.
         fov-radians (-> fov (/ 180) (* Math/PI)) ; vertical
         aspect (/ width (float height))
-        z0-1? (not (.homogeneousDepth (bgfx get-caps))) ; https://www.youtube.com/watch?v=o-xwmTODTUI
+        z0-1? (not (.homogeneousDepth (bgfx get-caps)))
         proj (.setPerspectiveLH (Matrix4f.) fov-radians aspect near far z0-1?)
 
         ;; TODO explore bgfx window/fb size concepts
@@ -159,49 +161,31 @@ void main() {
         _ (glfw get-cursor-pos window cur-x cur-y)
         _ (glfw get-window-size window win-w win-h)
         ;; ───────────────────────────────────────────────────────────── picking
-        view-proj (.mul (Matrix4f. view) proj)
-        pick-at (Vector3f.) ; more like pick-dir, same effect presumably
-        pick-eye (Vector3f.)
-        _ (.unprojectRay view-proj (get cur-x 0) (get cur-y 0) ; win: x y
+        ;; see impl - chooses subtype of multiplication
+        proj-view (.mul (Matrix4f. proj) view) ; so proj . view . v
+        pick-at (.unproject proj-view (Vector3f. (get cur-x 0) (get cur-y 0) 1.) ; win: x y z
             (int-array [0 0 (get win-w 0) (get win-h 0)]) ; viewport: x y w h
-            pick-at pick-eye) ; origin dir, why swapped?
+            (Vector3f.))
+        pick-view (.setLookAtLH (Matrix4x3f.) eye pick-at up)
+        pick-proj (.setPerspectiveLH (Matrix4f.) (/ Math/PI 180) 1 near far z0-1?)
 
-        pick-up (Vector3f. -1. 0. 0.) ; why?
-        pick-view (.setLookAtLH (Matrix4x3f.) pick-eye pick-at pick-up)
-        pick-proj (.setPerspectiveLH (Matrix4f.) fov-radians 1 near far z0-1?)
-
-        ;; currently giving approx
-        ;; 6,6           5,6
-        ;;
-        ;; 6,5           5,5
-        ;; i.e. mainly too zoomed in (plus maybe flipped etc)
-        ;; instead of (maybe)
-        ;;  0, 0        11, 0
-        ;;
-        ;; 11, 1        11,11
         encoder (bgfx encoder-begin false)]
 
     (when @save?
-      
-      (print-table-with notate
-        view (Matrix4f. view) proj view-proj 
-        pick-view pick-proj)
-      
-      )
+      (print-table-with notate view proj proj-view)
+      (print-table-with notate pick-view pick-proj))
     ;;(Thread/sleep 1000) ; save power but breaks (when @save?)
     (doseq [[i s] (map-indexed vector [(format "t=%.2f" time)
                                        (format "f=%.2f" frame-time)
-                                       (format "xy=%.2f %.2f"
+                                       (format "xy=%.0f %.0f"
                                          (get cur-x 0) (get cur-y 0))
                                        (format "wh=%d %d"
                                          (get win-w 0) (get win-h 0))
-                                       (format "exyz=%.2f %.2f %.2f"
+                                       (format "exyz=% .2f % .2f % .2f"
                                          (.x eye) (.y eye) (.z eye))
-                                       (format "axyz=%.2f %.2f %.2f"
+                                       (format "axyz=% .2f % .2f % .2f"
                                          (.x at) (.y at) (.z at))
-                                       (format "pexyz=%.5f %.5f %.5f"
-                                         (.x pick-eye) (.y pick-eye) (.z pick-eye))
-                                       (format "paxyz=%.5f %.5f %.5f"
+                                       (format "paxyz=% .5f % .5f % .5f"
                                          (.x pick-at) (.y pick-at) (.z pick-at))])]
       (bgfx dbg-text-printf 0 i 0x1f s))
 
@@ -219,18 +203,18 @@ void main() {
     (bgfx set-view-transform (:shading pass)
           (.get4x4 view (float-array 16))
           (.get proj (float-array 16)))
-    (doseq [yy (range 12) xx (range 12)]
-      (bgfx encoder-set-transform encoder
-            (-> (Matrix4x3f.)
+    (doseq [yy (range 12) xx (range 12)
+            :let [transform (-> (Matrix4x3f.)
               (.translation
-                (-> xx (* 3.) (- 15))
-                (-> yy (* 3.) (- 15))
-                5.)
-              (.rotateXYZ
-                (-> xx (* 0.21) #_ (+ time))
-                (-> yy (* 0.37) #_(+ time))
+                (-> xx (* 3.) (- 16))
+                (-> yy (* 3.) (- 16))
                 0.)
-              (.get4x4 (float-array 16))))
+              (.rotateXYZ
+                (-> xx (* 0.21) #_(+ time))
+                (-> yy (* 0.37) #_(+ time))
+                0.))]]
+      #_(when @save? (print-table-with notate transform))
+      (bgfx encoder-set-transform encoder (.get4x4 transform (float-array 16)))
       ;; encoder, stream, handle, startvertex, numvertices
       (bgfx encoder-set-vertex-buffer encoder 0 vertex-buffer 0 8)
       ;; encoder, handle, firstindex, numindices
@@ -242,8 +226,7 @@ void main() {
 
       ;; encoder, handle, value, numelements
       (bgfx encoder-set-uniform encoder pick-uniform (id->uniform xx yy) 1)
-      (bgfx encoder-submit encoder (:id pass) picking-program 0 0)
-      )
+      (bgfx encoder-submit encoder (:id pass) picking-program 0 0))
 
     (bgfx encoder-blit encoder (:blit pass)
           pick-blit-texture 0 0 0 0 ; dest mip x y z
@@ -257,7 +240,7 @@ void main() {
         (doseq [x (range pick-dim) y (range pick-dim)
                 :let [i (+ (* x pick-dim) y)
                       v (.get ib i)]]
-          (when (= (/ pick-dim 2) x y) (println x y (hex-str v) (abgr->id v))) 
+          (when (and (zero? x) (zero? y)) (println x y (hex-str v) (abgr->id v))) 
           (.setRGB im x y (abgr->argb v)))
         (ImageIO/write im "png" (io/file "wtf.png"))
         (swap! save? not)))

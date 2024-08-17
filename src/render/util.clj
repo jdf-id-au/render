@@ -209,7 +209,11 @@
   (notate [x] (bracket 4 
               (.m00 x) (.m10 x) (.m20 x) (.m30 x)
               (.m01 x) (.m11 x) (.m21 x) (.m31 x)
-              (.m02 x) (.m12 x) (.m22 x) (.m32 x))))
+              (.m02 x) (.m12 x) (.m22 x) (.m32 x)))
+  Vector4f
+  (notate [x] (bracket 4 (.x x) (.y x) (.z x) (.w x)))
+  Vector3f
+  (notate [x] (bracket 3 (.x x) (.y x) (.z x))))
 
 (comment
   (hex-str 0xaabbccdd) ; => "0xaabbccdd"
@@ -218,6 +222,10 @@
   (hex-str (rgba->argb 0xaabbccff)) ; => "0xffaabbcc"
   (hex-str (rgba->argb 0xffff95bf)) ; => "0xbfffff95"
   )
+
+(defn unproject
+  "Currently as learning exercise..."
+  [])
 
 (defn mapmap ; ──────────────────────────────── from jdf/comfort for print-table
   "Map f over each coll within c."
@@ -241,6 +249,7 @@
          L LT R RT
          H V HT
          BL B BT BR] #_(seq "┌─┬┐│├│┤─│┼└─┴┘") (repeat \space)]
+    ;; ugh different in repl vs console during debugging; unicode impl badness or me?
     (->>
       (concat
         [(loop [[w & r] widths
@@ -250,7 +259,8 @@
              (apply str (concat acc (repeat w T) [TR]))))]
         (for [[r [h row]] (map-indexed vector (map vector heights rcl))
               l (range (inc h))
-              :when (not (and (= l h) (= (inc r) (count rcl))))]
+              :when (not (and (= l h) (= (inc r) (count rcl))))
+              ]
           (str
             (if (= l h) LT L)
             (->>
@@ -269,7 +279,9 @@
            (if r
              (recur r (concat acc (repeat w B) [BT]))
              (apply str (concat acc (repeat w B) [BR]))))])
-      (map println) dorun)))
+      (interpose \newline)
+      (apply str)
+      println)))
 
 (defmacro print-table-with
   "Print table of unevaluated xs then the values of (f x).

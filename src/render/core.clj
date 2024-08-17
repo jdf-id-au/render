@@ -113,6 +113,7 @@
                               (Thread/sleep 5000)))
                        (recur (- (glfw get-timer-value) pre)))) ; full speed!
 
+                   ;; FIXME sometimes get interesting libjvm segfault see log
                    :else nil))))
            (catch Throwable t
              (swap! status assoc :startup-error (Throwable->map t))))
