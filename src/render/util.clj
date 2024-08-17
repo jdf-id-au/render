@@ -1,6 +1,7 @@
 (ns render.util
   (:require [clojure.string :as str])
-  (:import (java.io File)))
+  (:import (java.io File)
+           (org.joml Matrix4f Matrix4x3f Vector3f Vector4f)))
 
 (defmacro with-resource ; ───────────────────────── pseudo-RAII from jdf/comfort
   "bindings => [name init deinit ...]
@@ -165,6 +166,51 @@
                      (bit-shift-left g 8)
                      b))))
 
+(defn bracket
+  "Render `coll` of floats as string showing row-major matrix with `cols` columns."
+  [cols & coll]
+  {:pre [(pos? cols) (zero? (mod (count coll) cols))]}
+  (let [[LU RU LM RM LL RL L R] (seq "⎡⎤⎢⎥⎣⎦[]" ; proper brackets
+                                  #_"┌┐││└┘[]") ; box drawing
+        rows (/ (count coll) cols)]
+    (apply str ; more readable than StringWriter
+      (reduce (fn [acc [i v]]
+                (let [v (format "% 5.1f " v)
+                      row (quot i cols)
+                      col (mod i cols)]
+                  (condp = col
+                    0 (conj acc (case rows
+                                 1 L
+                                  (condp = row
+                                    0 LU
+                                    (dec rows) LL
+                                    LM)) v)
+                    (dec cols) (conj acc v (case rows
+                                             1 R
+                                             (condp = row
+                                               0 RU
+                                               (dec rows) RL
+                                               RM)) \newline)
+                    (conj acc v)))
+                )
+        [] (map-indexed vector coll)))))
+
+(defprotocol MathFormat
+  (notate [this]))
+
+(extend-protocol MathFormat
+  Matrix4f
+  (notate [x] (bracket 4 
+              (.m00 x) (.m10 x) (.m20 x) (.m30 x)
+              (.m01 x) (.m11 x) (.m21 x) (.m31 x)
+              (.m02 x) (.m12 x) (.m22 x) (.m32 x)
+              (.m03 x) (.m13 x) (.m23 x) (.m33 x)))
+  Matrix4x3f
+  (notate [x] (bracket 4 
+              (.m00 x) (.m10 x) (.m20 x) (.m30 x)
+              (.m01 x) (.m11 x) (.m21 x) (.m31 x)
+              (.m02 x) (.m12 x) (.m22 x) (.m32 x))))
+
 (comment
   (hex-str 0xaabbccdd) ; => "0xaabbccdd"
   (hex-str (rgba->argb 0xaabbccdd)) ; => "0xddaabbcc"
@@ -172,3 +218,61 @@
   (hex-str (rgba->argb 0xaabbccff)) ; => "0xffaabbcc"
   (hex-str (rgba->argb 0xffff95bf)) ; => "0xbfffff95"
   )
+
+(defn mapmap ; ──────────────────────────────── from jdf/comfort for print-table
+  "Map f over each coll within c."
+  [f c]
+  (map #(map f %) c))
+
+(defn print-table
+  "Doesn't currently support ragged tables. Better for multiline vals than clojure.pprint/print-table."
+  ;; entirely unoptimised
+  [& rows]
+  {:pre [(apply = (map count rows))]}
+  (let [rcl (mapmap (fnil str/split-lines "") rows) ; nested rows->cols->lines
+        widest-line (fn [lines] (->> lines (map count) (apply max)))
+        widths (apply map ; i.e. all first cols then all second cols
+                 (fn [& cols] (->> cols (map widest-line) (apply max 1)))
+                 rcl)
+        heights (map
+                  (fn [cols] (->> cols (map count) (apply max 1)))
+                  rcl)
+        [TL T TT TR ; top left, top (plain), top tick, top right
+         L LT R RT
+         H V HT
+         BL B BT BR] #_(seq "┌─┬┐│├│┤─│┼└─┴┘") (repeat \space)]
+    (->>
+      (concat
+        [(loop [[w & r] widths
+                acc [TL]]
+           (if r
+             (recur r (concat acc (repeat w T) [TT]))
+             (apply str (concat acc (repeat w T) [TR]))))]
+        (for [[r [h row]] (map-indexed vector (map vector heights rcl))
+              l (range (inc h))
+              :when (not (and (= l h) (= (inc r) (count rcl))))]
+          (str
+            (if (= l h) LT L)
+            (->>
+              (for [[w col] (map vector widths row)
+                    :let [v (if (= l h)
+                              (apply str (repeat w H))
+                              (get col l))
+                          n (count v)]
+                    ]
+                (apply str v (repeat (- w n) \space)))
+              (interpose (if (= l h) HT V))
+              (apply str))
+            (if (= l h) RT R)))
+        [(loop [[w & r] widths
+                acc [BL]]
+           (if r
+             (recur r (concat acc (repeat w B) [BT]))
+             (apply str (concat acc (repeat w B) [BR]))))])
+      (map println) dorun)))
+
+(defmacro print-table-with
+  "Print table of unevaluated xs then the values of (f x).
+  Useful for narrow multiline string values."
+  [f & xs]
+  `(print-table ~(mapv str xs) (map ~f ~(vec xs))))

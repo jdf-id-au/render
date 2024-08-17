@@ -2,7 +2,8 @@
   "Example project using jdf/render."
   (:require [render.renderer :as rr]
             [render.util :as ru :refer [with-resource glfw GLFW bgfx BGFX
-                                        hex-str abgr->argb]]
+                                        hex-str abgr->argb
+                                        notate print-table-with]]
             [render.shaders :as rs]
             [render.core :as rc]
             [clojure.java.io :as io])
@@ -141,7 +142,7 @@ void main() {
    {:keys [window] :as status} width height time frame-time]
   
   (let [at (Vector3f. 0. 0. 0.)
-        eye (Vector3f. 0. 0. -40.)
+        eye (Vector3f. 0. 0. -30.)
         up (Vector3f. 0. 1. 0.)
         ;; left-handed i.e. x right, y up, z away; 4 cols vs math convention
         view (.setLookAtLH (Matrix4x3f.) eye at up)
@@ -180,6 +181,14 @@ void main() {
         ;; 11, 1        11,11
         encoder (bgfx encoder-begin false)]
 
+    (when @save?
+      
+      (print-table-with notate
+        view (Matrix4f. view) proj view-proj 
+        pick-view pick-proj)
+      
+      )
+    ;;(Thread/sleep 1000) ; save power but breaks (when @save?)
     (doseq [[i s] (map-indexed vector [(format "t=%.2f" time)
                                        (format "f=%.2f" frame-time)
                                        (format "xy=%.2f %.2f"
