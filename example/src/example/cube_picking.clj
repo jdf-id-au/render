@@ -117,6 +117,7 @@ void main() {
    :pick-blit-texture [#(bgfx create-texture-2d pick-dim pick-dim false 1 (BGFX texture-format-rgba8)
                               (BGFX texture-blit-dst
                                     texture-read-back
+
                                     sampler-min-point sampler-mag-point sampler-mip-point
                                     sampler-u-clamp sampler-v-clamp) nil)
                        #(bgfx destroy-texture %)]
@@ -142,12 +143,13 @@ void main() {
   (let [at (Vector3f. 0. 0. 0.)
         eye (Vector3f. 0. 0. -40.)
         up (Vector3f. 0. 1. 0.)
-        view (.setLookAtLH (Matrix4x3f.) eye at up) ; left-handed; 4 cols vs math convention
+        ;; left-handed i.e. x right, y up, z away; 4 cols vs math convention
+        view (.setLookAtLH (Matrix4x3f.) eye at up)
         
         fov 60. near 0.1 far 100.
         fov-radians (-> fov (/ 180) (* Math/PI)) ; vertical
         aspect (/ width (float height))
-        z0-1? (not (.homogeneousDepth (bgfx get-caps)))
+        z0-1? (not (.homogeneousDepth (bgfx get-caps))) ; https://www.youtube.com/watch?v=o-xwmTODTUI
         proj (.setPerspectiveLH (Matrix4f.) fov-radians aspect near far z0-1?)
 
         ;; TODO explore bgfx window/fb size concepts
@@ -156,14 +158,15 @@ void main() {
         _ (glfw get-cursor-pos window cur-x cur-y)
         _ (glfw get-window-size window win-w win-h)
         ;; ───────────────────────────────────────────────────────────── picking
-        view-proj #_(.mul (Matrix4f. proj) view) (.mul (Matrix4f. view) proj)
+        view-proj (.mul (Matrix4f. view) proj)
         pick-at (Vector3f.) ; more like pick-dir, same effect presumably
         pick-eye (Vector3f.)
-        _ (.unprojectRay view-proj (get cur-x 0) (get cur-y 0)
-            (int-array [0 0 (get win-w 0) (get win-h 0)])
-            pick-eye pick-at)
+        _ (.unprojectRay view-proj (get cur-x 0) (get cur-y 0) ; win: x y
+            (int-array [0 0 (get win-w 0) (get win-h 0)]) ; viewport: x y w h
+            pick-at pick-eye) ; origin dir, why swapped?
 
-        pick-view (.setLookAtLH (Matrix4x3f.) pick-eye pick-at up)
+        pick-up (Vector3f. -1. 0. 0.) ; why?
+        pick-view (.setLookAtLH (Matrix4x3f.) pick-eye pick-at pick-up)
         pick-proj (.setPerspectiveLH (Matrix4f.) fov-radians 1 near far z0-1?)
 
         ;; currently giving approx
@@ -213,7 +216,7 @@ void main() {
               (.translation
                 (-> xx (* 3.) (- 15))
                 (-> yy (* 3.) (- 15))
-                -2. #_(* 3. (Math/sin (+ #_time xx yy)))) ; breaks pick view when pos; its proj must be broken
+                5.)
               (.rotateXYZ
                 (-> xx (* 0.21) #_ (+ time))
                 (-> yy (* 0.37) #_(+ time))
