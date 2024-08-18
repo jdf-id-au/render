@@ -53,19 +53,25 @@ void main() {
 }")
    :debug {:varying "
 vec4 v_color0 : COLOR0 = vec4(1.0, 1.0, 1.0, 1.0);
-vec3 a_position: POSITION;
-vec4 a_color0 : COLOR0;"
+vec3 a_position : POSITION;
+vec2 a_texcoord0 : TEXCOORD0;
+vec2 v_texcoord0 : TEXCOORD0;
+vec4 a_color0 : COLOR0;
+"
            :vertex "
-$input a_position, a_color0
-$output v_color0
+$input a_position, a_texcoord0, a_color0
+$output v_texcoord0, v_color0
 void main() {
   gl_Position = mul(u_modelViewProj, vec4(a_position, 1.0));
+  v_texcoord0 = a_texcoord0;
   v_color0 = a_color0;
 }"
            :fragment "
-$input v_color0
+//$input v_color0
+$input v_texcoord0
+SAMPLER2D(s_texColor, 0);
 void main() {
-  gl_FragColor = v_color0;
+  gl_FragColor = texture2D(s_texColor, v_texcoord0); //v_color0;
 }"}})
 
 (add-watch #'shaders :refresh (fn [_ _ _ _] (@rc/refresh!)))
@@ -133,8 +139,10 @@ void main() {
    :shading-program [#(let [{:keys [vertex fragment]} (->> shaders :cubes rs/compile rr/load-shader)]
                         (bgfx create-program vertex fragment true)) ; true destroyShaders
                      #(bgfx destroy-program %)]
-   :pick-uniform [#(bgfx create-uniform "u_pick" (BGFX uniform-type-vec4) 1) #(bgfx destroy-uniform %)]
-   :pick-target [#(bgfx create-texture-2d pick-dim pick-dim false 1 (BGFX texture-format-rgba8)
+   :pick-uniform [;; name type numels
+                  #(bgfx create-uniform "u_pick" (BGFX uniform-type-vec4) 1) #(bgfx destroy-uniform %)]
+   :pick-target [;; width height has mips, num layers, format, flags, data
+                 #(bgfx create-texture-2d pick-dim pick-dim false 1 (BGFX texture-format-rgba8)
                         (BGFX texture-rt
                               sampler-min-point sampler-mag-point sampler-mip-point
                               sampler-u-clamp sampler-v-clamp) nil)
@@ -145,9 +153,7 @@ void main() {
                                     sampler-u-clamp sampler-v-clamp) nil)
                        #(bgfx destroy-texture %)]
    :pick-blit-texture [#(bgfx create-texture-2d pick-dim pick-dim false 1 (BGFX texture-format-rgba8)
-                              (BGFX texture-blit-dst
-                                    texture-read-back
-
+                              (BGFX texture-blit-dst texture-read-back
                                     sampler-min-point sampler-mag-point sampler-mip-point
                                     sampler-u-clamp sampler-v-clamp) nil)
                        #(bgfx destroy-texture %)]
@@ -173,6 +179,7 @@ void main() {
    :debug-ib [#(rr/make-index-buffer (:debug-indices %) debug-indices)
               #(bgfx destroy-vertex-buffer %)
               #{:debug-indices}]
+   :debug-stc [#(bgfx create-uniform "s_texColor" (BGFX uniform-type-sampler) 1) #(bgfx destroy-uniform %)]
    :debug-program [#(let [{:keys [vertex fragment]} (->> shaders :debug rs/compile rr/load-shader)]
                       (bgfx create-program vertex fragment true))
                    #(bgfx destroy-program %)]})
@@ -182,7 +189,7 @@ void main() {
            pick-uniform pick-target pick-depth-buffer
            pick-blit-texture pick-data
            pick-framebuffer picking-program
-           debug-vb debug-ib debug-program] :as context}
+           debug-vb debug-ib debug-stc debug-program] :as context}
    {:keys [window] :as status} width height time frame-time]
   (let [;; ─────────────────────────────────────────────────────────────── scene
         at (Vector3f. 0. 0. 0.)
@@ -288,6 +295,8 @@ void main() {
     (bgfx encoder-set-transform encoder identity-matrix-float-array)
     (bgfx encoder-set-vertex-buffer encoder 0 debug-vb 0 (count debug-indices))
     (bgfx encoder-set-index-buffer encoder debug-ib 0 (count debug-indices))
+    ;; encoder, program sampler, texture handle, (sampling mode)
+    #_(bgfx encoder-set-texture encoder debug-stc pick-target (unchecked-int 0xFFFFFFFF)) ; UINT_MAX i.e. texture's modes
     (bgfx encoder-set-state encoder (BGFX state-default) 0)
     (bgfx encoder-submit encoder (:debug pass) debug-program 0 0)
     

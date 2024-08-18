@@ -21,7 +21,11 @@
   (let [w (StringWriter.)
         [io-lines normal-lines] (->> code str/split-lines
                                   (remove str/blank?)
-                                  (partition-by #(str/starts-with? % "$")))]
+                                  (remove #(str/starts-with? % "//"))
+                                  (partition-by #(str/starts-with? % "$")))
+        [io-lines normal-lines] (if normal-lines
+                                  [io-lines normal-lines]
+                                  [[] io-lines])]
     (doseq [group [io-lines
                    ["#include \"bgfx_shader.sh\""]
                    normal-lines]
@@ -31,7 +35,7 @@
     (.toString w)))
 
 (defn compile
-  "Compile supplied shaders using `shaderc` on OS command line."
+  "Compile supplied shaders using `shaderc` on OS command line. Auto-includes `bgfx_shader.sh`."
   [{:keys [varying] :as code}]
   {:pre [varying (some code #{:vertex :fragment :compute})]}
   (let [vdsc (doto (ci/temp-file "render" "varying.def.sc") .deleteOnExit)
