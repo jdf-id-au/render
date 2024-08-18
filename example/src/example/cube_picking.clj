@@ -295,8 +295,9 @@ void main() {
     (bgfx encoder-set-transform encoder identity-matrix-float-array)
     (bgfx encoder-set-vertex-buffer encoder 0 debug-vb 0 (count debug-indices))
     (bgfx encoder-set-index-buffer encoder debug-ib 0 (count debug-indices))
-    ;; encoder, program sampler, texture handle, (sampling mode)
-    #_(bgfx encoder-set-texture encoder debug-stc pick-target (unchecked-int 0xFFFFFFFF)) ; UINT_MAX i.e. texture's modes
+    ;; something's happening... texture is black when top left corner of wtf.png is black...
+    ;; encoder, texture unit, program sampler (is just 0), texture handle, (sampling mode)
+    (bgfx encoder-set-texture encoder 0 debug-stc pick-target (unchecked-int 0xFFFFFFFF)) ; UINT_MAX i.e. texture's modes
     (bgfx encoder-set-state encoder (BGFX state-default) 0)
     (bgfx encoder-submit encoder (:debug pass) debug-program 0 0)
     
