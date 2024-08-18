@@ -11,23 +11,25 @@
 
 (defn make-vertex-layout ; ═══════════════════════════════════════════════ setup
   "Supply attribs as e.g. `(BGFX attrib-color0 atrib-texcoord0)`."
-  [attribs]
-  (let [layout (BGFXVertexLayout/calloc)]
-    (bgfx vertex-layout-begin layout (bgfx get-renderer-type))
-    (bgfx vertex-layout-add layout ; always present
-      (BGFX attrib-position) 3 (BGFX attrib-type-float) false false)
-    (when (cc/bit-includes? attribs (BGFX attrib-normal))
-      (bgfx vertex-layout-add layout
-        (BGFX attrib-normal) 3 (BGFX attrib-type-float) false false))
-    (when (cc/bit-includes? attribs (BGFX attrib-color0))
-      (bgfx vertex-layout-add layout
-        (BGFX attrib-color0) 4 (BGFX attrib-type-uint8) true false))
-    (when (cc/bit-includes? attribs (BGFX attrib-texcoord0))
-      ;; source impl included but didn't use `nUVs` other that pos?
-      (bgfx vertex-layout-add layout
-        (BGFX attrib-texcoord0) 2 (BGFX attrib-type-float) false false))
-    (bgfx vertex-layout-end layout)
-    layout))
+  ([] (make-vertex-layout 0))
+  ([attribs]
+   (let [layout (BGFXVertexLayout/calloc)]
+     (bgfx vertex-layout-begin layout (bgfx get-renderer-type))
+     ;; layout, attrib, numels, eltype, normalised, asint
+     (bgfx vertex-layout-add layout ; always present
+           (BGFX attrib-position) 3 (BGFX attrib-type-float) false false)
+     (when (cc/bit-includes? attribs (BGFX attrib-normal))
+       (bgfx vertex-layout-add layout
+             (BGFX attrib-normal) 3 (BGFX attrib-type-float) false false))
+     (when (cc/bit-includes? attribs (BGFX attrib-color0))
+       (bgfx vertex-layout-add layout
+             (BGFX attrib-color0) 4 (BGFX attrib-type-uint8) true false))
+     (when (cc/bit-includes? attribs (BGFX attrib-texcoord0))
+       ;; source impl included but didn't use `nUVs` other that pos?
+       (bgfx vertex-layout-add layout
+             (BGFX attrib-texcoord0) 2 (BGFX attrib-type-float) false false))
+     (bgfx vertex-layout-end layout)
+     layout)))
 
 (defn make-vertex-buffer
   ([buffer layout]
@@ -102,7 +104,10 @@
 
 (defn check-setup
   [context] ; TODO more functionality
-  {:deps (cc/dag (for [[k [_ _ deps]] context, d deps] [k d]))})
+  {:deps (cc/dag
+           (concat
+             (for [[k _] context] [k k]) ; include dep-free entries too
+             (for [[k [_ _ deps]] context, d deps] [k d])))})
 
 (defn make-setup [context]
   (let [order (cc/deps-order (for [[k [_ _ deps]] context, d deps] [k d]))]

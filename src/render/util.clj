@@ -4,12 +4,12 @@
   (:import (java.io File)
            (org.joml Matrix4f Matrix4x3f Vector3f Vector4f)))
 
-;; TODO gen/import docs for repl use...
-
 (defn rename ; ───────────────────────────────────────────── ergonomic API calls
   [prefix converter sym]
   (symbol (str prefix (converter sym))))
 
+;; TODO could set meta :doc on resulting form containing docs from bgfx.idl?
+;; would need to come up with lua parser? or write another codegen.lua?
 (defmacro bgfx
   "Briefer function calls"
   {:clj-kondo/ignore [:unresolved-symbol]}

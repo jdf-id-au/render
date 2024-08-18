@@ -15,6 +15,7 @@
 (def shaders
   ;; Copyright 2011-2024 Branimir Karadzic. Modified.
   ;; License: https://github.com/bkaradzic/bgfx/blob/master/LICENSE
+  ;; reminder: uniform per-primitive, attribute per-vertex, varying per-fragment (pixel)
   {:cubes
    {:varying "
 vec4 v_color0    : COLOR0    = vec4(1.0, 0.0, 0.0, 1.0);
@@ -38,7 +39,7 @@ void main()
 (add-watch #'shaders :refresh (fn [_ _ _ _] (@rc/refresh!)))
 
 (def cube-vertices
-  [[-1.  1.  1. 0xff000000] ;; Double Double Double Long
+  [[-1.  1.  1. 0xff000000] ;; Double Double Double Long (abgr!!)
    [ 1.  1.  1. 0xff0000ff]
    [-1. -1.  1. 0xff00ff00]
    [ 1. -1.  1. 0xff00ffff]
@@ -54,12 +55,13 @@ void main()
 (def context
   "Map of resource -> [create-fn destroy-fn] or [create-fn destroy-fn deps]"
   {:layout [#(rr/make-vertex-layout (BGFX attrib-color0)) #(.free %)]
-   :vertices [#(MemoryUtil/memAlloc (* 8 (+ (* 3 4) 4))) #(MemoryUtil/memFree %)]
+   ;; ideally? would calc size per vertex from layout...
+   :vertices [#(MemoryUtil/memAlloc (* (count cube-vertices) (+ (* 3 4) 4))) #(MemoryUtil/memFree %)]
    :vertex-buffer
    [#(rr/make-vertex-buffer (:vertices %) (:layout %) cube-vertices)
     #(bgfx destroy-vertex-buffer %)
     #{:vertices :layout}]
-   :indices [#(MemoryUtil/memAlloc (* 2 (count cube-indices))) #(MemoryUtil/memFree %)]
+   :indices [#(MemoryUtil/memAlloc (* (count cube-indices) 2)) #(MemoryUtil/memFree %)]
    :index-buffer
    [#(rr/make-index-buffer (:indices %) cube-indices)
     #(bgfx destroy-index-buffer %)
@@ -112,8 +114,12 @@ void main()
                 (-> yy (* 0.37) (+ time))
                 0.)
               (.get4x4 (float-array 16))))
-      (bgfx encoder-set-vertex-buffer encoder 0 vertex-buffer 0 8)
-      (bgfx encoder-set-index-buffer encoder index-buffer 0 36)
+      ;; encoder, stream, handle, startvertex, numvertices
+      (bgfx encoder-set-vertex-buffer encoder 0 vertex-buffer 0 (count cube-vertices)) ; use-case for startvertex, numvertices?
+      ;; encoder, handle, firstindex, numindices
+      (bgfx encoder-set-index-buffer encoder index-buffer 0 (count cube-indices))
+      ;; encoder, state, rgba
       (bgfx encoder-set-state encoder (BGFX state-default) 0)
+      ;; encoder, view id, program, depth (for sorting), flags (discard or preserve states)
       (bgfx encoder-submit encoder 0 program 0 0))
     (bgfx encoder-end encoder)))

@@ -37,6 +37,7 @@ void main() {
 (def shaders
   ;; Copyright 2011-2024 Branimir Karadzic. Modified.
   ;; License: https://github.com/bkaradzic/bgfx/blob/master/LICENSE
+  ;; reminder: uniform per-primitive, attribute per-vertex, varying per-fragment (pixel)
   {:cubes (assoc common :fragment "
 $input v_color0
 void main() {
@@ -50,17 +51,27 @@ void main() {
   //gl_FragColor.b = 1.0;
   //gl_FragColor.a = 1.0;
 }")
-   ;; identical to :cubes for the moment!
-   :debug (assoc common :fragment "
+   :debug {:varying "
+vec4 v_color0 : COLOR0 = vec4(1.0, 1.0, 1.0, 1.0);
+vec3 a_position: POSITION;
+vec4 a_color0 : COLOR0;"
+           :vertex "
+$input a_position, a_color0
+$output v_color0
+void main() {
+  gl_Position = mul(u_modelViewProj, vec4(a_position, 1.0));
+  v_color0 = a_color0;
+}"
+           :fragment "
 $input v_color0
 void main() {
   gl_FragColor = v_color0;
-}")})
+}"}})
 
 (add-watch #'shaders :refresh (fn [_ _ _ _] (@rc/refresh!)))
 
 (def cube-vertices
-  [[-1.  1.  1. 0xff000000] ;; Double Double Double Long
+  [[-1.  1.  1. 0xff000000] ;; Double Double Double Long (abgr!!)
    [ 1.  1.  1. 0xff0000ff]
    [-1. -1.  1. 0xff00ff00]
    [ 1. -1.  1. 0xff00ffff]
@@ -76,10 +87,10 @@ void main() {
 (def debug-vertices
   "Just make a square!"
   (let [o 0. x 1.]
-    [[o o o]
-     [x o o]
-     [x x o]
-     [o x o]]))
+    [[o o o 0xff0000ff]
+     [x o o 0xff00ff00]
+     [x x o 0xffff0000]
+     [o x o 0xff000000]]))
 
 (def debug-indices
   "...out of triangles"
@@ -90,7 +101,6 @@ void main() {
   (zipmap [:shading :id :blit :debug] (range)))
 
 (def pick-dim 64)
-
 (def encode #(-> % (* 20.) (/ 0xFF)))
 (def decode #(-> % (/ 20)))
 
@@ -111,18 +121,18 @@ void main() {
 (def context
   "Map of resource -> [create-fn destroy-fn] or [create-fn destroy-fn deps]"
   {:layout [#(rr/make-vertex-layout (BGFX attrib-color0)) #(.free %)]
-   :vertices [#(MemoryUtil/memAlloc (* 8 (+ (* 3 4) 4))) #(MemoryUtil/memFree %)]
+   ;; ideally? would calc size per vertex from layout...
+   :vertices [#(MemoryUtil/memAlloc (* (count cube-vertices) (+ (* 3 4) 4))) #(MemoryUtil/memFree %)]
    :vertex-buffer [#(rr/make-vertex-buffer (:vertices %) (:layout %) cube-vertices)
                    #(bgfx destroy-vertex-buffer %)
                    #{:vertices :layout}]
-   :indices [#(MemoryUtil/memAlloc (* 2 (count cube-indices))) #(MemoryUtil/memFree %)]
+   :indices [#(MemoryUtil/memAlloc (* (count cube-indices) 2)) #(MemoryUtil/memFree %)]
    :index-buffer [#(rr/make-index-buffer (:indices %) cube-indices)
                   #(bgfx destroy-index-buffer %)
                   #{:indices}]
    :shading-program [#(let [{:keys [vertex fragment]} (->> shaders :cubes rs/compile rr/load-shader)]
                         (bgfx create-program vertex fragment true)) ; true destroyShaders
                      #(bgfx destroy-program %)]
-   ;; reminder: uniform per-primitive, attribute per-vertex, varying per-fragment (pixel)
    :pick-uniform [#(bgfx create-uniform "u_pick" (BGFX uniform-type-vec4) 1) #(bgfx destroy-uniform %)]
    :pick-target [#(bgfx create-texture-2d pick-dim pick-dim false 1 (BGFX texture-format-rgba8)
                         (BGFX texture-rt
@@ -152,12 +162,26 @@ void main() {
                           (throw (ex-info "texture blit not supported"
                                    {:supported (.supported (bgfx get-caps))})))
                         (bgfx create-program vertex fragment true))
-                     #(bgfx destroy-program %)]})
+                     #(bgfx destroy-program %)]
+   :debug-layout [#(rr/make-vertex-layout (BGFX attrib-color0)) #(.free %)]
+   :debug-vertices [#(MemoryUtil/memAlloc (* (count debug-vertices) (+ (* 3 4) 4))) #(MemoryUtil/memFree %)]
+   :debug-vb [#(rr/make-vertex-buffer (:debug-vertices %) (:debug-layout %) debug-vertices)
+              #(bgfx destroy-vertex-buffer %)
+              #{:debug-vertices :debug-layout}]
+   :debug-indices [#(MemoryUtil/memAlloc (* (count debug-indices) 2)) #(MemoryUtil/memFree %)]
+   :debug-ib [#(rr/make-index-buffer (:debug-indices %) debug-indices)
+              #(bgfx destroy-vertex-buffer %)
+              #{:debug-indices}]
+   :debug-program [#(let [{:keys [vertex fragment]} (->> shaders :debug rs/compile rr/load-shader)]
+                      (bgfx create-program vertex fragment true))
+                   #(bgfx destroy-program %)]})
 
 (defn renderer
   [{:keys [vertex-buffer index-buffer shading-program
-           pick-uniform pick-target pick-depth-buffer pick-blit-texture pick-data
-           pick-framebuffer picking-program] :as context}
+           pick-uniform pick-target pick-depth-buffer
+           pick-blit-texture pick-data
+           pick-framebuffer picking-program
+           debug-vb debug-ib debug-program] :as context}
    {:keys [window] :as status} width height time frame-time]
   (let [;; ─────────────────────────────────────────────────────────────── scene
         at (Vector3f. 0. 0. 0.)
@@ -196,7 +220,7 @@ void main() {
       (print-tabular-with notate view proj (Matrix4f. view) proj-view)
       (print-tabular-with notate pick-view pick-proj))
     ;;(Thread/sleep 1000) ; save power but breaks (when @save?)
-    (doseq [[i s] (map-indexed vector [(format "t=%.2f" time)
+    #_(doseq [[i s] (map-indexed vector [(format "t=%.2f" time)
                                        (format "f=%.2f" frame-time)
                                        (format "xy=%.0f %.0f" cur-x cur-y)
                                        (format "wh=%d %d" win-w win-h)
@@ -206,7 +230,8 @@ void main() {
                                          (.x at) (.y at) (.z at))
                                        (format "paxyz=% .5f % .5f % .5f"
                                          (.x pick-at) (.y pick-at) (.z pick-at))])]
-      (bgfx dbg-text-printf 0 i 0x1f s))
+        (bgfx dbg-text-printf 0 i 0x1f s))
+    #_(bgfx dbg-text-clear (unchecked-int 0x000000ff) true)
 
     ;; render pass is needed to inspect a previous pass' generated image
     (bgfx set-view-clear (:id pass) (BGFX clear-color clear-depth)
@@ -240,9 +265,9 @@ void main() {
       #_(when @save? (print-table-with notate transform))
       (bgfx encoder-set-transform encoder (.get4x4 transform (float-array 16)))
       ;; encoder, stream, handle, startvertex, numvertices
-      (bgfx encoder-set-vertex-buffer encoder 0 vertex-buffer 0 8)
+      (bgfx encoder-set-vertex-buffer encoder 0 vertex-buffer 0 (count cube-vertices)) ; use-case for startvertex, numvertices?
       ;; encoder, handle, firstindex, numindices
-      (bgfx encoder-set-index-buffer encoder index-buffer 0 36)
+      (bgfx encoder-set-index-buffer encoder index-buffer 0 (count cube-indices))
       ;; encoder, state, rgba
       (bgfx encoder-set-state encoder (BGFX state-default) 0)
       ;; submit primitive for rendering: encoder, view_id, program, depth, flags
@@ -250,6 +275,7 @@ void main() {
 
       ;; encoder, handle, value, numelements
       (bgfx encoder-set-uniform encoder pick-uniform (id->uniform xx yy) 1)
+      ;; encoder, view id, program, depth (for sorting), flags (discard or preserve states)
       (bgfx encoder-submit encoder (:id pass) picking-program 0 0))
 
     (bgfx encoder-blit encoder (:blit pass)
@@ -257,6 +283,12 @@ void main() {
           pick-target 0 0 0 0 ; src mip x y z
           pick-dim pick-dim 0) ; w h d
     (bgfx read-texture pick-blit-texture pick-data 0) ; handle, data, mip
+
+    (bgfx encoder-set-transform encoder identity-matrix-float-array)
+    (bgfx encoder-set-vertex-buffer encoder 0 debug-vb 0 (count debug-indices))
+    (bgfx encoder-set-index-buffer encoder debug-ib 0 (count debug-indices))
+    (bgfx encoder-set-state encoder (BGFX state-default) 0)
+    (bgfx encoder-submit encoder (:debug pass) debug-program 0 0)
     
     (when @save?
       (let [im (BufferedImage. pick-dim pick-dim BufferedImage/TYPE_INT_ARGB)
