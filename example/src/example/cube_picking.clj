@@ -86,11 +86,11 @@ void main() {
 
 (def debug-vertices
   "Just make a square!"
-  (let [o 0. x 1.]
-    [[o o o 0xff0000ff] ; r -> bl with identity-matrix view and proj
-     [x o o 0xff00ff00] ; g -> br
-     [x x o 0xffff0000] ; b -> tr
-     [o x o 0xff00ffff]])) ; y -> tl i.e. [x y (z) abgr]
+  (let [o -1. x 1. z 0.]
+    [[o o z 0xff0000ff] ; r -> bl with identity-matrix view and proj
+     [x o z 0xff00ff00] ; g -> br
+     [x x z 0xffff0000] ; b -> tr
+     [o x z 0xff00ffff]])) ; y -> tl i.e. [x y abgr]
 
 (def debug-indices
   "...out of triangles"
@@ -164,6 +164,7 @@ void main() {
                         (bgfx create-program vertex fragment true))
                      #(bgfx destroy-program %)]
    :debug-layout [#(rr/make-vertex-layout (BGFX attrib-color0)) #(.free %)]
+   ;; layout currently forces 3d vertices
    :debug-vertices [#(MemoryUtil/memAlloc (* (count debug-vertices) (+ (* 3 4) 4))) #(MemoryUtil/memFree %)]
    :debug-vb [#(rr/make-vertex-buffer (:debug-vertices %) (:debug-layout %) debug-vertices)
               #(bgfx destroy-vertex-buffer %)
@@ -213,12 +214,12 @@ void main() {
         pick-proj (.setPerspectiveLH (Matrix4f.) (/ Math/PI 180) 1 near far z0-1?)
         ;; ─────────────────────────────────────────────────────────────── debug
         identity-matrix-float-array (.get (Matrix4f.) (float-array 16))
-                                       
+        
         encoder (bgfx encoder-begin false)]
 
     (when @save?
       (print-tabular-with notate view proj (Matrix4f. view) proj-view)
-      (print-tabular-with notate pick-view pick-proj))
+      (print-tabular-with notate pick-view pick-proj (doto (Matrix4f.) (.translate -1. 0. 0.))))
     ;;(Thread/sleep 1000) ; save power but breaks (when @save?)
     #_(doseq [[i s] (map-indexed vector [(format "t=%.2f" time)
                                        (format "f=%.2f" frame-time)
@@ -247,7 +248,7 @@ void main() {
           (.get4x4 view (float-array 16))
           (.get proj (float-array 16)))
 
-    (bgfx set-view-rect (:debug pass) 0 0 100 100) ; x can't be neg but is inset in landscape view
+    (bgfx set-view-rect (:debug pass) 0 0 100 100)
     (bgfx set-view-transform (:debug pass)
           identity-matrix-float-array
           identity-matrix-float-array)
@@ -263,7 +264,7 @@ void main() {
                 (-> yy (* 0.37) #_(+ time))
                 0.))]]
       #_(when @save? (print-table-with notate transform))
-      (bgfx encoder-set-transform encoder (.get4x4 transform (float-array 16)))
+      (bgfx encoder-set-transform encoder (.get4x4 transform (float-array 16))) ; model space -> object space?
       ;; encoder, stream, handle, startvertex, numvertices
       (bgfx encoder-set-vertex-buffer encoder 0 vertex-buffer 0 (count cube-vertices)) ; use-case for startvertex, numvertices?
       ;; encoder, handle, firstindex, numindices

@@ -16,7 +16,7 @@
    (let [layout (BGFXVertexLayout/calloc)]
      (bgfx vertex-layout-begin layout (bgfx get-renderer-type))
      ;; layout, attrib, numels, eltype, normalised, asint
-     (bgfx vertex-layout-add layout ; always present
+     (bgfx vertex-layout-add layout ; always present, assumes 3d
            (BGFX attrib-position) 3 (BGFX attrib-type-float) false false)
      (when (cc/bit-includes? attribs (BGFX attrib-normal))
        (bgfx vertex-layout-add layout
