@@ -143,7 +143,6 @@ void main() {
            pick-uniform pick-target pick-depth-buffer pick-blit-texture pick-data
            pick-framebuffer picking-program] :as context}
    {:keys [window] :as status} width height time frame-time]
-  
   (let [at (Vector3f. 0. 0. 0.)
         eye (Vector3f. 0. 0. -30.)
         up (Vector3f. 0. 1. 0.)

@@ -48,66 +48,36 @@ void main()
    [ 1. -1. -1. 0xffffffff]])
 
 (def cube-indices
-  [0 1 2
-   1 3 2
-   4 6 5
-   5 6 7
-   0 2 4
-   4 2 6
-   1 5 3
-   5 7 3
-   0 4 1
-   4 5 1
-   2 3 6
-   6 3 7])
+  [0 1 2, 1 3 2, 4 6 5, 5 6 7, 0 2 4, 4 2 6,
+   1 5 3, 5 7 3, 0 4 1, 4 5 1, 2 3 6, 6 3 7])
 
 (def context
   "Map of resource -> [create-fn destroy-fn] or [create-fn destroy-fn deps]"
-  {:layout
-   [#(rr/make-vertex-layout false true 0)
-    #(.free %)]
-   :vertices
-   [#(MemoryUtil/memAlloc (* 8 (+ (* 3 4) 4)))
-    #(MemoryUtil/memFree %)]
-   :vbh
+  {:layout [#(rr/make-vertex-layout false true 0) #(.free %)]
+   :vertices [#(MemoryUtil/memAlloc (* 8 (+ (* 3 4) 4))) #(MemoryUtil/memFree %)]
+   :vertex-buffer
    [#(rr/make-vertex-buffer (:vertices %) (:layout %) cube-vertices)
     #(bgfx destroy-vertex-buffer %)
     #{:vertices :layout}]
-   :indices
-   [#(MemoryUtil/memAlloc (* 2 (count cube-indices)))
-    #(MemoryUtil/memFree %)]
-   :ibh
+   :indices [#(MemoryUtil/memAlloc (* 2 (count cube-indices))) #(MemoryUtil/memFree %)]
+   :index-buffer
    [#(rr/make-index-buffer (:indices %) cube-indices)
     #(bgfx destroy-index-buffer %)
     #{:indices}]
    :program
    [#(let [{:keys [vertex fragment]} (->> shaders :cubes rs/compile rr/load-shader)]
        (bgfx create-program vertex fragment true)) ; third arg is destroyShaders
-    #(bgfx destroy-program %)]
-   :view-buf
-   [#(MemoryUtil/memAllocFloat 16)
-    #(MemoryUtil/memFree %)]
-   :proj-buf
-   [#(MemoryUtil/memAllocFloat 16)
-    #(MemoryUtil/memFree %)]
-   :model-buf
-   [#(MemoryUtil/memAllocFloat 16)
-    #(MemoryUtil/memFree %)]})
+    #(bgfx destroy-program %)]})
 
 (comment ; blank renderer
   (defn renderer [_ _ width height _ _ ]
     (bgfx set-view-rect 0 0 0 width height)
-    (bgfx touch 0)
-    )
+    (bgfx touch 0))
   )
 
 (defn renderer
-  [{:keys [view-buf proj-buf model-buf vbh ibh program] :as context}
+  [{:keys [vertex-buffer index-buffer program] :as context}
    status width height time frame-time]
-  (bgfx set-view-rect 0 0 0 width height)
-  (bgfx touch 0)
-  (bgfx dbg-text-printf 0 0 0x1f (str frame-time))
-
   (let [at (Vector3f. 0. 0. 0.)
         eye (Vector3f. (* 10 #_(Math/tan time)) (* 30 (Math/sin time)) -35. )
         view (doto (Matrix4x3f.)
@@ -123,13 +93,13 @@ void main()
                (.setPerspectiveLH fov-radians aspect near far
                  (not (.homogeneousDepth (bgfx get-caps)))))
 
-        _ (bgfx set-view-transform 0
-                (.get4x4 view view-buf)
-                (.get proj proj-buf))
-
         ;; encoder is for multi-threaded draw call submission
-        encoder (bgfx encoder-begin false)
-        ]
+        encoder (bgfx encoder-begin false)]
+    (bgfx dbg-text-printf 0 0 0x1f (str frame-time))
+    (bgfx set-view-rect 0 0 0 width height)
+    (bgfx set-view-transform 0
+          (.get4x4 view (float-array 16))
+          (.get proj (float-array 16)))
     (doseq [yy (range 12) xx (range 12)]
       (bgfx encoder-set-transform encoder
             (-> (Matrix4x3f.)
@@ -141,10 +111,9 @@ void main()
                 (-> xx (* 0.21) (+ time))
                 (-> yy (* 0.37) (+ time))
                 0.)
-              (.get4x4 model-buf)))
-      (bgfx encoder-set-vertex-buffer encoder 0 vbh 0 8)
-      (bgfx encoder-set-index-buffer encoder ibh 0 36)
+              (.get4x4 (float-array 16))))
+      (bgfx encoder-set-vertex-buffer encoder 0 vertex-buffer 0 8)
+      (bgfx encoder-set-index-buffer encoder index-buffer 0 36)
       (bgfx encoder-set-state encoder (BGFX state-default) 0)
       (bgfx encoder-submit encoder 0 program 0 0))
-    
     (bgfx encoder-end encoder)))
