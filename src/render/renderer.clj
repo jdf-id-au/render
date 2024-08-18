@@ -9,18 +9,21 @@
              BGFXReleaseFunctionCallback BGFXReleaseFunctionCallbackI)
            (org.lwjgl.system Platform MemoryStack MemoryUtil)))
 
-(defn make-vertex-layout [normals? colour? nUVs] ; ═══════════════════════ setup
+(defn make-vertex-layout ; ═══════════════════════════════════════════════ setup
+  "Supply attribs as e.g. `(BGFX attrib-color0 atrib-texcoord0)`."
+  [attribs]
   (let [layout (BGFXVertexLayout/calloc)]
     (bgfx vertex-layout-begin layout (bgfx get-renderer-type))
-    (bgfx vertex-layout-add layout
+    (bgfx vertex-layout-add layout ; always present
       (BGFX attrib-position) 3 (BGFX attrib-type-float) false false)
-    (when normals?
+    (when (cc/bit-includes? attribs (BGFX attrib-normal))
       (bgfx vertex-layout-add layout
         (BGFX attrib-normal) 3 (BGFX attrib-type-float) false false))
-    (when colour?
+    (when (cc/bit-includes? attribs (BGFX attrib-color0))
       (bgfx vertex-layout-add layout
         (BGFX attrib-color0) 4 (BGFX attrib-type-uint8) true false))
-    (when (pos? nUVs)
+    (when (cc/bit-includes? attribs (BGFX attrib-texcoord0))
+      ;; source impl included but didn't use `nUVs` other that pos?
       (bgfx vertex-layout-add layout
         (BGFX attrib-texcoord0) 2 (BGFX attrib-type-float) false false))
     (bgfx vertex-layout-end layout)

@@ -53,7 +53,7 @@ void main()
 
 (def context
   "Map of resource -> [create-fn destroy-fn] or [create-fn destroy-fn deps]"
-  {:layout [#(rr/make-vertex-layout false true 0) #(.free %)]
+  {:layout [#(rr/make-vertex-layout (BGFX attrib-color0)) #(.free %)]
    :vertices [#(MemoryUtil/memAlloc (* 8 (+ (* 3 4) 4))) #(MemoryUtil/memFree %)]
    :vertex-buffer
    [#(rr/make-vertex-buffer (:vertices %) (:layout %) cube-vertices)

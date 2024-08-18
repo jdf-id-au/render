@@ -49,6 +49,12 @@ void main() {
   gl_FragColor.rgba = u_pick.rgba;
   //gl_FragColor.b = 1.0;
   //gl_FragColor.a = 1.0;
+}")
+   ;; identical to :cubes for the moment!
+   :debug (assoc common :fragment "
+$input v_color0
+void main() {
+  gl_FragColor = v_color0;
 }")})
 
 (add-watch #'shaders :refresh (fn [_ _ _ _] (@rc/refresh!)))
@@ -67,11 +73,21 @@ void main() {
   [0 1 2, 1 3 2, 4 6 5, 5 6 7, 0 2 4, 4 2 6,
    1 5 3, 5 7 3, 0 4 1, 4 5 1, 2 3 6, 6 3 7])
 
+(def debug-vertices
+  "Just make a square!"
+  (let [o 0. x 1.]
+    [[o o o]
+     [x o o]
+     [x x o]
+     [o x o]]))
+
+(def debug-indices
+  "...out of triangles"
+  [0 1 2, 1 3 2]) ; reason for not 1 2 3? winding or something?
+
 (def pass
   "bgfx_view_id_t"
-  {:shading 0
-   :id 1
-   :blit 2})
+  (zipmap [:shading :id :blit :debug] (range)))
 
 (def pick-dim 64)
 
@@ -94,7 +110,7 @@ void main() {
 
 (def context
   "Map of resource -> [create-fn destroy-fn] or [create-fn destroy-fn deps]"
-  {:layout [#(rr/make-vertex-layout false true 0) #(.free %)]
+  {:layout [#(rr/make-vertex-layout (BGFX attrib-color0)) #(.free %)]
    :vertices [#(MemoryUtil/memAlloc (* 8 (+ (* 3 4) 4))) #(MemoryUtil/memFree %)]
    :vertex-buffer [#(rr/make-vertex-buffer (:vertices %) (:layout %) cube-vertices)
                    #(bgfx destroy-vertex-buffer %)
@@ -106,8 +122,8 @@ void main() {
    :shading-program [#(let [{:keys [vertex fragment]} (->> shaders :cubes rs/compile rr/load-shader)]
                         (bgfx create-program vertex fragment true)) ; true destroyShaders
                      #(bgfx destroy-program %)]
-   :pick-uniform [#(bgfx create-uniform "u_pick" (BGFX uniform-type-vec4) 1)
-                  #(bgfx destroy-uniform %)]
+   ;; reminder: uniform per-primitive, attribute per-vertex, varying per-fragment (pixel)
+   :pick-uniform [#(bgfx create-uniform "u_pick" (BGFX uniform-type-vec4) 1) #(bgfx destroy-uniform %)]
    :pick-target [#(bgfx create-texture-2d pick-dim pick-dim false 1 (BGFX texture-format-rgba8)
                         (BGFX texture-rt
                               sampler-min-point sampler-mag-point sampler-mip-point
@@ -143,34 +159,41 @@ void main() {
            pick-uniform pick-target pick-depth-buffer pick-blit-texture pick-data
            pick-framebuffer picking-program] :as context}
    {:keys [window] :as status} width height time frame-time]
-  (let [at (Vector3f. 0. 0. 0.)
+  (let [;; ─────────────────────────────────────────────────────────────── scene
+        at (Vector3f. 0. 0. 0.)
         eye (Vector3f. 0. 0. -30.)
         up (Vector3f. 0. 1. 0.)
         ;; left-handed i.e. x thumb right, y index up, z middle away; colxrow vs math convention
         view (.setLookAtLH (Matrix4x3f.) eye at up) ; object space -> eye space ("position of camera")
-        
         fov 60. near 0.1 far 100.
         fov-radians (-> fov (/ 180) (* Math/PI)) ; vertical
         aspect (/ width (float height))
         z0-1? (not (.homogeneousDepth (bgfx get-caps))) ; .hD is true when zNDC in [-1, 1], else [0, 1]
-        proj (.setPerspectiveLH (Matrix4f.) fov-radians aspect near far z0-1?) ;; eye space -> clip space ("attributes of camera")
-
+        proj (.setPerspectiveLH (Matrix4f.) fov-radians aspect near far z0-1?) ; eye space -> clip space ("attributes of camera")
+        ;; ───────────────────────────────────────────────────────────── picking
         ;; TODO explore bgfx window/fb size concepts
         [cur-x cur-y win-w win-h] (ru/cursor-pos window)
-        ;; ───────────────────────────────────────────────────────────── picking
+        ;; (Matrix4f. proj) just adds fourth (mathematical) row 0 0 0 1
+        ;; note alignment of lisp and mathematical order (non-commutative)
         ;; see impl - chooses subtype of multiplication
-        proj-view (.mul (Matrix4f. proj) view) ; so proj . view . v
+        proj-view (.mul (Matrix4f. proj) view) ; for proj . view . vec4
         pick-at (.unproject proj-view (Vector3f. cur-x cur-y 1.) ; win: x y z
                   (int-array [0 0 win-w win-h]) ; viewport: x y w h
                   (Vector3f.))
-        ;; FIXME picking centre is almost right but movements are wrong
-        pick-view (.setLookAtLH (Matrix4x3f.) eye pick-at up)
+        pick-up (Vector3f. -1. 0. 0.)
+        ;; FIXME picking is still nqr
+        ;; clicking rightwards moves it down, clicking downwards moves it right, so up should be -1 0 0
+        ;; would be better to understand exactly what's happening
+        ;; click also seems to be nqr; need to see picking image live, rather than click at a time
+        pick-view (.setLookAtLH (Matrix4x3f.) eye pick-at pick-up #_up)
         pick-proj (.setPerspectiveLH (Matrix4f.) (/ Math/PI 180) 1 near far z0-1?)
-
+        ;; ─────────────────────────────────────────────────────────────── debug
+        identity-matrix-float-array (.get (Matrix4f.) (float-array 16))
+                                       
         encoder (bgfx encoder-begin false)]
 
     (when @save?
-      (print-tabular-with notate view proj proj-view)
+      (print-tabular-with notate view proj (Matrix4f. view) proj-view)
       (print-tabular-with notate pick-view pick-proj))
     ;;(Thread/sleep 1000) ; save power but breaks (when @save?)
     (doseq [[i s] (map-indexed vector [(format "t=%.2f" time)
@@ -188,7 +211,6 @@ void main() {
     ;; render pass is needed to inspect a previous pass' generated image
     (bgfx set-view-clear (:id pass) (BGFX clear-color clear-depth)
           0x000000ff 1.0 0) ; should be in setup
-
     (bgfx set-view-frame-buffer (:id pass) pick-framebuffer)
     (bgfx set-view-rect (:id pass) 0 0 pick-dim pick-dim)
     (bgfx set-view-transform (:id pass)
@@ -199,6 +221,12 @@ void main() {
     (bgfx set-view-transform (:shading pass)
           (.get4x4 view (float-array 16))
           (.get proj (float-array 16)))
+
+    (bgfx set-view-rect (:debug pass) 0 0 100 100)
+    (bgfx set-view-transform (:debug pass)
+          identity-matrix-float-array
+          identity-matrix-float-array)
+    
     (doseq [yy (range 12) xx (range 12)
             :let [transform (-> (Matrix4x3f.)
               (.translation
@@ -236,7 +264,7 @@ void main() {
         (doseq [x (range pick-dim) y (range pick-dim)
                 :let [i (+ (* x pick-dim) y)
                       v (.get ib i)]]
-          (when (and (zero? x) (zero? y)) (println x y (hex-str v) (abgr->id v))) 
+          (when (= (dec (/ pick-dim 2)) x y) (println x y (hex-str v) (abgr->id v))) 
           (.setRGB im x y (abgr->argb v)))
         (ImageIO/write im "png" (io/file "wtf.png"))
         (swap! save? not)))
