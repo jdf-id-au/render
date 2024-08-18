@@ -52,6 +52,29 @@ void main() {
   //gl_FragColor.a = 1.0;
 }")
    :debug {:varying "
+vec3 a_position : POSITION;
+vec2 a_texcoord0 : TEXCOORD0;
+vec2 v_texcoord0 : TEXCOORD0;
+"
+           :vertex "
+$input a_position, a_texcoord0
+$output v_texcoord0
+void main() {
+  gl_Position = mul(u_modelViewProj, vec4(a_position, 1.0));
+  v_texcoord0 = a_texcoord0;
+}"
+           :fragment "
+$input v_texcoord0
+SAMPLER2D(s_texColor, 0);
+void main() {
+  gl_FragColor = texture2D(s_texColor, v_texcoord0);
+}"#_"
+//$input v_color0
+$input v_texcoord0
+SAMPLER2D(s_texColor, 0);
+void main() {
+  gl_FragColor = texture2D(s_texColor, v_texcoord0); //v_color0;
+}"}#_{:varying "
 vec4 v_color0 : COLOR0 = vec4(1.0, 1.0, 1.0, 1.0);
 vec3 a_position : POSITION;
 vec2 a_texcoord0 : TEXCOORD0;
@@ -296,6 +319,7 @@ void main() {
     (bgfx encoder-set-vertex-buffer encoder 0 debug-vb 0 (count debug-indices))
     (bgfx encoder-set-index-buffer encoder debug-ib 0 (count debug-indices))
     ;; something's happening... texture is black when top left corner of wtf.png is black...
+    ;; still showed colours until I completely removed _color0 params from shader
     ;; encoder, texture unit, program sampler (is just 0), texture handle, (sampling mode)
     (bgfx encoder-set-texture encoder 0 debug-stc pick-target (unchecked-int 0xFFFFFFFF)) ; UINT_MAX i.e. texture's modes
     (bgfx encoder-set-state encoder (BGFX state-default) 0)
