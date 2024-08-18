@@ -87,14 +87,14 @@ void main() {
 (def debug-vertices
   "Just make a square!"
   (let [o 0. x 1.]
-    [[o o o 0xff0000ff]
-     [x o o 0xff00ff00]
-     [x x o 0xffff0000]
-     [o x o 0xff000000]]))
+    [[o o o 0xff0000ff] ; r -> bl with identity-matrix view and proj
+     [x o o 0xff00ff00] ; g -> br
+     [x x o 0xffff0000] ; b -> tr
+     [o x o 0xff00ffff]])) ; y -> tl i.e. [x y (z) abgr]
 
 (def debug-indices
   "...out of triangles"
-  [0 1 2, 1 3 2]) ; reason for not 1 2 3? winding or something?
+  [0 2 3, 0 1 2]) ; how does order work? need normals?? winding???
 
 (def pass
   "bgfx_view_id_t"
@@ -247,7 +247,7 @@ void main() {
           (.get4x4 view (float-array 16))
           (.get proj (float-array 16)))
 
-    (bgfx set-view-rect (:debug pass) 0 0 100 100)
+    (bgfx set-view-rect (:debug pass) 0 0 100 100) ; x can't be neg but is inset in landscape view
     (bgfx set-view-transform (:debug pass)
           identity-matrix-float-array
           identity-matrix-float-array)
