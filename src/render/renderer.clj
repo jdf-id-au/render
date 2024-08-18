@@ -1,5 +1,6 @@
 (ns render.renderer
-  (:require [render.util :as ru :refer [with-resource glfw GLFW bgfx BGFX]]
+  (:require [render.util :as ru :refer [glfw GLFW bgfx BGFX]]
+            [comfort.core :as cc]
             [clojure.java.io :as io])
   (:import (java.util.function Consumer)
            (java.nio.file Files)
@@ -7,17 +8,6 @@
              BGFXVertexLayout
              BGFXReleaseFunctionCallback BGFXReleaseFunctionCallbackI)
            (org.lwjgl.system Platform MemoryStack MemoryUtil)))
-
-(defn display-scale
-  "Return window x-scale, y-scale, unscaled width and unscaled height."
-  [window]
-  (let [x (float-array 1)
-        y (float-array 1)
-        w (int-array 1)
-        h (int-array 1)]
-    (glfw get-window-content-scale window x y) ; ratio between current dpi and platform's default dpi
-    (glfw get-window-size window w h) ; in screen coordinates
-    (mapv first [x y w h])))
 
 (defn make-vertex-layout [normals? colour? nUVs] ; ═══════════════════════ setup
   (let [layout (BGFXVertexLayout/calloc)]
@@ -109,10 +99,10 @@
 
 (defn check-setup
   [context] ; TODO more functionality
-  {:deps (ru/dag (for [[k [_ _ deps]] context, d deps] [k d]))})
+  {:deps (cc/dag (for [[k [_ _ deps]] context, d deps] [k d]))})
 
 (defn make-setup [context]
-  (let [order (ru/deps-order (for [[k [_ _ deps]] context, d deps] [k d]))]
+  (let [order (cc/deps-order (for [[k [_ _ deps]] context, d deps] [k d]))]
     [(fn setup []
        (loop [acc {}
               [k & r] (into (keys context) (reverse order))]
@@ -149,8 +139,8 @@
   "Initialise BGFX and configure window."
   [window width height]
   (println "Making renderer")
-  (with-resource [stack (MemoryStack/stackPush) nil
-                  init (BGFXInit/malloc stack) nil]
+  (cc/with-resource [stack (MemoryStack/stackPush) nil
+                     init (BGFXInit/malloc stack) nil]
     (bgfx init-ctor init)
     ;; backbuffer resolution and reset
     ;; "Passes the resolution field to the specified Consumer"...

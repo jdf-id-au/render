@@ -2,7 +2,7 @@
   "Example project using jdf/render."
   (:require [render.renderer :as rr]
             [render.core :as rc]
-            [render.util :as ru :refer [with-resource glfw GLFW bgfx BGFX]]
+            [render.util :as ru :refer [glfw GLFW bgfx BGFX]]
             [render.shaders :as rs])
   (:import (org.lwjgl.system MemoryUtil)
            (org.joml Matrix4f Matrix4x3f Vector3f)))

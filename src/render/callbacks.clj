@@ -1,6 +1,7 @@
 (ns render.callbacks
   ;; https://www.glfw.org/docs/3.3/input_guide.html
-  (:require [render.util :as util :refer [with-resource glfw GLFW bgfx BGFX]]
+  (:require [render.util :as util :refer [glfw GLFW bgfx BGFX]]
+            [comfort.core :as cc]
             [clojure.pprint :refer [pprint]]
             [clojure.string :as str])
   (:import (org.lwjgl.glfw Callbacks GLFWErrorCallback
@@ -19,9 +20,9 @@
   "Convert :type/name to GLFW_TYPE_NAME."
   [nskw]
   (->> (str "org.lwjgl.glfw.GLFW/GLFW_"
-         (-> nskw namespace util/kebab->screaming-snake)
+         (-> nskw namespace cc/kebab->screaming-snake)
          "_"
-         (-> nskw name util/kebab->screaming-snake))
+         (-> nskw name cc/kebab->screaming-snake))
     symbol eval))
 
 (defn group-bindings

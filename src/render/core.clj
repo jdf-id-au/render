@@ -7,14 +7,16 @@
             [nrepl.server]
             [render.renderer :as rr]
             [render.callbacks :as rc]
-            [render.util :as ru :refer [with-resource glfw GLFW bgfx BGFX]]
+            [render.util :as ru :refer [glfw GLFW bgfx BGFX]]
+            [comfort.core :as cc]
+            [comfort.system :as cs]
             [clojure.pprint :refer [pprint]])
   (:import (java.util Objects)
            (org.lwjgl.glfw Callbacks GLFWErrorCallback GLFWKeyCallbackI)
            (org.lwjgl.system Platform MemoryUtil)))
 
 (defn start-repl [port] ; ═════════════════════════════════════════════════ REPL
-  (println "Starting cider-enabled nREPL on port" port "from thread" (ru/current-thread))
+  (println "Starting cider-enabled nREPL on port" port "from thread" (cs/current-thread))
   (try
     (nrepl.server/start-server :port port :handler cider.nrepl/cider-nrepl-handler)
     (catch Exception e
@@ -62,7 +64,7 @@
 
 (defn make-graphics-thread [window width height
                             context-var renderer-var]
-  (println "🎨 Making graphics thread from" (ru/current-thread))
+  (println "🎨 Making graphics thread from" (cs/current-thread))
   (add-watch context-var :refresh
     (fn [k r o n] (println "Refreshing graphics thread for renderer context")
       (@refresh!)))
@@ -73,14 +75,14 @@
     {:thread
      (Thread.
        (fn []
-         (println "Graphics thread running on" (ru/current-thread))
+         (println "Graphics thread running on" (cs/current-thread))
          (try
            (let [[setup-fn teardown-fn] (rr/make-setup (var-get context-var))]
-             (with-resource [session
-                             (rr/open-bgfx-session window width height)
-                             rr/close-bgfx-session
-                             
-                             context (setup-fn) teardown-fn]
+             (cc/with-resource [session
+                                (rr/open-bgfx-session window width height)
+                                rr/close-bgfx-session
+                                
+                                context (setup-fn) teardown-fn]
                (swap! status assoc
                  :renderer-var renderer-var
                  :started (glfw get-timer-value))
@@ -131,22 +133,22 @@
              callbacks-var :callbacks}
             & args]
   (println "Startup")
-  (with-resource
+  (cc/with-resource
     [repl (start-repl 12345) stop-repl
      glfw-session (open-glfw-session) close-glfw-session]
     (loop [] ; ────────────────────────────────────────────────────────── window
-      (with-resource [window (open-window title width height) close-window]
+      (cc/with-resource [window (open-window title width height) close-window]
         (loop [{:keys [close?] :as status} nil] ; ─────────────────────── thread
           (when-not close?
             (recur
-              (with-resource [callbacks
-                              (rc/setup window callbacks-var)
-                              rc/teardown
+              (cc/with-resource [callbacks
+                                 (rc/setup window callbacks-var)
+                                 rc/teardown
 
-                              graphics
-                              (make-graphics-thread window width height
-                                context-var renderer-var)
-                              join-graphics-thread]
+                                 graphics
+                                 (make-graphics-thread window width height
+                                   context-var renderer-var)
+                                 join-graphics-thread]
                 (let [{:keys [thread status]} graphics]
                   (println "Starting graphics thread")
                   (.start thread)

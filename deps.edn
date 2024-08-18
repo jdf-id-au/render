@@ -8,6 +8,8 @@
                                  :exclusions [com.github.haifengl/smile-mkl]}
         #_#_org.clj-commons/primitive-math {:mvn/version "1.0.1"}
         org.joml/joml {:mvn/version "1.10.7"}
+
+        jdf/comfort {:local/root "../comfort"}
         
         nrepl/nrepl {:mvn/version "1.0.0"}
         cider/cider-nrepl {:mvn/version "0.49.0"}}

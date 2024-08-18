@@ -1,9 +1,10 @@
 (ns example.cube-picking
   "Example project using jdf/render."
   (:require [render.renderer :as rr]
-            [render.util :as ru :refer [with-resource glfw GLFW bgfx BGFX
-                                        hex-str abgr->argb
-                                        notate print-table-with]]
+            [render.util :as ru :refer [glfw GLFW bgfx BGFX
+                                        notate]]
+            [comfort.core :as cc :refer [hex-str print-tabular-with
+                                         abgr->argb]]
             [render.shaders :as rs]
             [render.core :as rc]
             [clojure.java.io :as io])
@@ -147,40 +148,36 @@ void main() {
         eye (Vector3f. 0. 0. -30.)
         up (Vector3f. 0. 1. 0.)
         ;; left-handed i.e. x thumb right, y index up, z middle away; colxrow vs math convention
-        view (.setLookAtLH (Matrix4x3f.) eye at up)
+        view (.setLookAtLH (Matrix4x3f.) eye at up) ; object space -> eye space ("position of camera")
         
         fov 60. near 0.1 far 100.
         fov-radians (-> fov (/ 180) (* Math/PI)) ; vertical
         aspect (/ width (float height))
-        z0-1? (not (.homogeneousDepth (bgfx get-caps)))
-        proj (.setPerspectiveLH (Matrix4f.) fov-radians aspect near far z0-1?)
+        z0-1? (not (.homogeneousDepth (bgfx get-caps))) ; .hD is true when zNDC in [-1, 1], else [0, 1]
+        proj (.setPerspectiveLH (Matrix4f.) fov-radians aspect near far z0-1?) ;; eye space -> clip space ("attributes of camera")
 
         ;; TODO explore bgfx window/fb size concepts
-        cur-x (double-array 1) cur-y (double-array 1)
-        win-w (int-array 1) win-h (int-array 1)
-        _ (glfw get-cursor-pos window cur-x cur-y)
-        _ (glfw get-window-size window win-w win-h)
+        [cur-x cur-y win-w win-h] (ru/cursor-pos window)
         ;; ───────────────────────────────────────────────────────────── picking
         ;; see impl - chooses subtype of multiplication
         proj-view (.mul (Matrix4f. proj) view) ; so proj . view . v
-        pick-at (.unproject proj-view (Vector3f. (get cur-x 0) (get cur-y 0) 1.) ; win: x y z
-            (int-array [0 0 (get win-w 0) (get win-h 0)]) ; viewport: x y w h
-            (Vector3f.))
+        pick-at (.unproject proj-view (Vector3f. cur-x cur-y 1.) ; win: x y z
+                  (int-array [0 0 win-w win-h]) ; viewport: x y w h
+                  (Vector3f.))
+        ;; FIXME picking centre is almost right but movements are wrong
         pick-view (.setLookAtLH (Matrix4x3f.) eye pick-at up)
         pick-proj (.setPerspectiveLH (Matrix4f.) (/ Math/PI 180) 1 near far z0-1?)
 
         encoder (bgfx encoder-begin false)]
 
     (when @save?
-      (print-table-with notate view proj proj-view)
-      (print-table-with notate pick-view pick-proj))
+      (print-tabular-with notate view proj proj-view)
+      (print-tabular-with notate pick-view pick-proj))
     ;;(Thread/sleep 1000) ; save power but breaks (when @save?)
     (doseq [[i s] (map-indexed vector [(format "t=%.2f" time)
                                        (format "f=%.2f" frame-time)
-                                       (format "xy=%.0f %.0f"
-                                         (get cur-x 0) (get cur-y 0))
-                                       (format "wh=%d %d"
-                                         (get win-w 0) (get win-h 0))
+                                       (format "xy=%.0f %.0f" cur-x cur-y)
+                                       (format "wh=%d %d" win-w win-h)
                                        (format "exyz=% .2f % .2f % .2f"
                                          (.x eye) (.y eye) (.z eye))
                                        (format "axyz=% .2f % .2f % .2f"

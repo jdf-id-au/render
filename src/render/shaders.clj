@@ -9,6 +9,8 @@
   "
   ;; TODO lisp-curse-write shaders too? infer/learn/fake-until-make
   (:require [render.util :as ru]
+            [comfort.core :as cc]
+            [comfort.io :as ci]
             [clojure.string :as str]
             [clojure.java.io :as io])
   (:import (java.io StringWriter)
@@ -32,7 +34,7 @@
   "Compile supplied shaders using `shaderc` on OS command line."
   [{:keys [varying] :as code}]
   {:pre [varying (some code #{:vertex :fragment :compute})]}
-  (let [vdsc (ru/temp-file "varying.def.sc")
+  (let [vdsc (doto (ci/temp-file "render" "varying.def.sc") .deleteOnExit)
         platform (condp #(str/starts-with? %2 %1) (System/getProperty "os.name")
                    "Linux" "linux"
                    "Mac" "osx"
@@ -46,10 +48,10 @@
     (into {}
       (for [shader #{:vertex :fragment :compute}
             :when (shader code)
-            :let [in (ru/temp-file (name shader))
+            :let [in (doto (ci/temp-file "render" (name shader)) .deleteOnExit)
                   plus-include (->> code shader add-include)
                   _ (spit in plus-include)
-                  out (ru/temp-file (str (name shader) ".bin"))]]
+                  out (doto (ci/temp-file "render" (str (name shader) ".bin")) .deleteOnExit)]]
         (let [proc (.start (ProcessBuilder.
                              ["shaderc"
                               "-f" (.getCanonicalPath in)
