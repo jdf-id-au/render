@@ -30,4 +30,4 @@
     org.lwjgl/lwjgl-bgfx$natives-linux {:mvn/version "3.3.4"}
     }}}}
 
-;; % clj -M:macos-x64 -m example.main
+;; % clj -M:macos-x64 -m example.cubes

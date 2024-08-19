@@ -123,3 +123,24 @@ void main()
       ;; encoder, view id, program, depth (for sorting), flags (discard or preserve states)
       (bgfx encoder-submit encoder 0 program 0 0))
     (bgfx encoder-end encoder)))
+
+(defn -main [& args]
+  (rc/main {:renderer [#'context #'renderer]
+            :window [800 600 "cubes"]
+            :callbacks #'callbacks}))
+
+(comment
+  ;; Windows, from emacs: M-:
+  ;;(setq cider-clojure-cli-global-options "-A:windows-x64")
+  ;; then cider-jack-in-clj, cider-load-buffer, and eval:
+  (-main) ; although seems slow to eval within emacs
+  ;; vs:
+  ;; PS> cd example
+  ;; PS> clj -M:windows-x64 -m example.cubes
+  
+  ;; Mac, from terminal:
+  ;; % cd example
+  ;; % clj -M:macos-x64 -m example.cubes
+  ;; then cider-connect-clj to localhost:port
+  ;; (-main will already be running)
+  )

@@ -1,4 +1,4 @@
-(ns example.cube-picking
+(ns example.picking
   "Example project using jdf/render."
   (:require [render.renderer :as rr]
             [render.util :as ru :refer [glfw GLFW bgfx BGFX
@@ -239,9 +239,11 @@ void main() {
         ;; FIXME picking is still nqr
         ;; clicking rightwards moves it down, clicking downwards moves it right, so up should be -1 0 0
         ;; would be better to understand exactly what's happening
+        ;; right up down right
         ;; click also seems to be nqr; need to see picking image live, rather than click at a time
         pick-view (.setLookAtLH (Matrix4x3f.) eye pick-at pick-up #_up)
-        pick-proj (.setPerspectiveLH (Matrix4f.) (/ Math/PI 180) 1 near far z0-1?)
+        pick-near 0.1 pick-far 100
+        pick-proj (.setPerspectiveLH (Matrix4f.) (/ Math/PI 180) 1 pick-near pick-far z0-1?)
         ;; ─────────────────────────────────────────────────────────────── debug
         identity-matrix-float-array (.get (Matrix4f.) (float-array 16))
         
@@ -320,6 +322,8 @@ void main() {
     (bgfx encoder-set-index-buffer encoder debug-ib 0 (count debug-indices))
     ;; something's happening... texture is black when top left corner of wtf.png is black...
     ;; still showed colours until I completely removed _color0 params from shader
+    ;; interestingly on windows it shows more normally
+    ;; ...and reveals maybe it's a clipping problem!
     ;; encoder, texture unit, program sampler (is just 0), texture handle, (sampling mode)
     (bgfx encoder-set-texture encoder 0 debug-stc pick-target (unchecked-int 0xFFFFFFFF)) ; UINT_MAX i.e. texture's modes
     (bgfx encoder-set-state encoder (BGFX state-default) 0)
@@ -336,3 +340,8 @@ void main() {
         (ImageIO/write im "png" (io/file "wtf.png"))
         (swap! save? not)))
     (bgfx encoder-end encoder)))
+
+(defn -main [& args]
+  (rc/main {:renderer [#'context #'renderer]
+            :window [800 600 "picking"]
+            :callbacks #'callbacks}))
