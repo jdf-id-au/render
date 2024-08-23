@@ -12,6 +12,8 @@ Read eval graphics loop! In the grand tradition of (but much less sophisticated 
 
 ## Getting started
 
+Uses [`jdf/comfort`](https://github.com/jdf-id-au/comfort) as well.
+
 ### macOS
 
 - shell `% cd example`
@@ -40,14 +42,12 @@ Read eval graphics loop! In the grand tradition of (but much less sophisticated 
 - `render.renderer/load-texture` function
 - `render.util/bgfx` and `BGFX` macros
 - `render.util/glfw` and `GLFW` macros
-- `render.util/with-resource` macro (copypaste from https://github.com/jdf-id-au/comfort )
 
 ## TODO
 
 - sane aspect ratio preservation
 - orbit
 - picking
-- shader wrangling (BGFX shell tools...)
 - save to video
 - ...
 

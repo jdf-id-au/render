@@ -167,19 +167,19 @@ void main() {
                   #(bgfx create-uniform "u_pick" (BGFX uniform-type-vec4) 1) #(bgfx destroy-uniform %)]
    :pick-target [;; width height has mips, num layers, format, flags, data
                  #(bgfx create-texture-2d pick-dim pick-dim false 1 (BGFX texture-format-rgba8)
-                        (BGFX texture-rt
-                              sampler-min-point sampler-mag-point sampler-mip-point
-                              sampler-u-clamp sampler-v-clamp) nil)
+                    (BGFX texture-rt ; render target no multisample antialiasing
+                      sampler-min-point sampler-mag-point sampler-mip-point
+                      sampler-u-clamp sampler-v-clamp) nil) ; wrap modes
                  #(bgfx destroy-texture %)]
    :pick-depth-buffer [#(bgfx create-texture-2d pick-dim pick-dim false 1 (BGFX texture-format-d32f)
-                              (BGFX texture-rt
-                                    sampler-min-point sampler-mag-point sampler-mip-point
-                                    sampler-u-clamp sampler-v-clamp) nil)
+                          (BGFX texture-rt
+                            sampler-min-point sampler-mag-point sampler-mip-point
+                            sampler-u-clamp sampler-v-clamp) nil)
                        #(bgfx destroy-texture %)]
    :pick-blit-texture [#(bgfx create-texture-2d pick-dim pick-dim false 1 (BGFX texture-format-rgba8)
-                              (BGFX texture-blit-dst texture-read-back
-                                    sampler-min-point sampler-mag-point sampler-mip-point
-                                    sampler-u-clamp sampler-v-clamp) nil)
+                          (BGFX texture-blit-dst texture-read-back
+                            sampler-min-point sampler-mag-point sampler-mip-point
+                            sampler-u-clamp sampler-v-clamp) nil)
                        #(bgfx destroy-texture %)]
    :pick-data [#(MemoryUtil/memAlloc (* pick-dim pick-dim 4)) #(MemoryUtil/memFree %)]
    :pick-framebuffer [#(let [sa (short-array [(:pick-target %) (:pick-depth-buffer %)])
@@ -251,8 +251,8 @@ void main() {
         encoder (bgfx encoder-begin false)]
 
     (when @save?
-      (print-tabular-with notate view proj (Matrix4f. view) proj-view)
-      (print-tabular-with notate pick-view pick-proj (doto (Matrix4f.) (.translate -1. 0. 0.))))
+      (print-tabular-with notate view proj proj-view)
+      (print-tabular-with notate pick-view pick-proj))
     ;;(Thread/sleep 1000) ; save power but breaks (when @save?)
     #_(doseq [[i s] (map-indexed vector [(format "t=%.2f" time)
                                        (format "f=%.2f" frame-time)
