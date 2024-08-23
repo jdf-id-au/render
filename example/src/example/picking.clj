@@ -14,12 +14,13 @@
            (javax.imageio ImageIO)))
 
 (def save? (atom false))
+(def z (atom 0.))
 
 (def callbacks
   {:mouse/button-1 (fn [window action] #_(println "saving!" window action @save?)
                      (when (pos? action) (swap! save? not)))
    [:mouse/button-1 :mod/shift] (fn [window action] (println "shift-button-1"))
-   #_#_:scroll (fn [window x y] (println "scroll " x " " y))})
+   :scroll (fn [window x y] (println "scroll" x y) (swap! z #(+ % y)))})
 
 (def common
   {:varying "
@@ -290,7 +291,7 @@ void main() {
               (.translation
                 (-> xx (* 3.) (- 16))
                 (-> yy (* 3.) (- 16))
-                0.)
+                @z)
               (.rotateXYZ
                 (-> xx (* 0.21) #_(+ time))
                 (-> yy (* 0.37) #_(+ time))
@@ -323,7 +324,8 @@ void main() {
     ;; something's happening... texture is black when top left corner of wtf.png is black...
     ;; still showed colours until I completely removed _color0 params from shader
     ;; interestingly on windows it shows more normally
-    ;; ...and reveals maybe it's a clipping problem!
+    ;; ...and reveals that texture is only correct in its top right quadrant (others are "smeared")
+    ;; ...and texture is displayed 90ccw to wtf.png
     ;; encoder, texture unit, program sampler (is just 0), texture handle, (sampling mode)
     (bgfx encoder-set-texture encoder 0 debug-stc pick-target (unchecked-int 0xFFFFFFFF)) ; UINT_MAX i.e. texture's modes
     (bgfx encoder-set-state encoder (BGFX state-default) 0)
