@@ -9,6 +9,7 @@ Read eval graphics loop! In the grand tradition of (but much less sophisticated 
 - https://github.com/digego/extempore
 - https://www.shadertoy.com/
 - https://github.com/oakes/play-cljc
+- https://github.com/roman01la/minimax
 
 ## Getting started
 
